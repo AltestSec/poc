@@ -52,7 +52,7 @@ stages:
           - task: TerraformInstaller@1
             displayName: 'Install Terraform'
             inputs:
-              terraformVersion: ${{ variables.terraformVersion }}
+              terraformVersion: 'latest'
 
           - task: TerraformTaskV4@4
             displayName: 'Terraform Init'
