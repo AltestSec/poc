@@ -1,0 +1,80 @@
+# ============================================================
+# airflow.cfg overrides — set via environment variables in ACA
+# This file documents all required env vars.
+# In practice, set these as Container App environment variables
+# (or Key Vault references for secrets).
+# ============================================================
+
+[core]
+# CeleryExecutor — workers run as separate ACA replicas
+executor = CeleryExecutor
+
+# DAGs folder mounted from Azure Files share
+dags_folder = /opt/airflow/dags
+
+# Parallelism across all workers combined
+parallelism = 32
+
+# Max active tasks per DAG run
+max_active_tasks_per_dag = 16
+
+# Fernet key — set via AIRFLOW__CORE__FERNET_KEY env var
+# fernet_key =
+
+[database]
+# PostgreSQL connection — set via AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+# sql_alchemy_conn = postgresql://airflow:PASSWORD@HOST/airflow?sslmode=require
+
+[celery]
+# Redis as broker — set via AIRFLOW__CELERY__BROKER_URL
+# broker_url = rediss://:PASSWORD@HOST:6380/0
+
+# Use PostgreSQL as result backend (more reliable than Redis for results)
+# result_backend = db+postgresql://airflow:PASSWORD@HOST/airflow?sslmode=require
+
+# How many tasks each worker runs concurrently
+worker_concurrency = 4
+
+[scheduler]
+# Health check endpoint used by ACA liveness probe
+enable_health_check = True
+
+# Heartbeat interval
+scheduler_heartbeat_sec = 5
+
+# For HA mode (minReplicas=2 in production):
+# IMPORTANT — see README: HA requires explicit configuration, not just 2 replicas.
+# num_runs = -1  (run forever, don't exit after N heartbeats)
+# This is set via AIRFLOW__SCHEDULER__NUM_RUNS=-1
+
+[webserver]
+# Internal only — no public exposure. Access via App Gateway or port-forward.
+base_url = http://localhost:8080
+
+# Secret key — set via AIRFLOW__WEBSERVER__SECRET_KEY
+# secret_key =
+
+# Session lifetime
+session_lifetime_minutes = 480
+
+[logging]
+# Remote logging to Azure Blob Storage
+# Workers write logs to Blob; Webserver reads from same location.
+# Required because workers scale to zero — ephemeral storage is lost.
+remote_logging = True
+remote_base_log_folder = wasb://airflow-logs@STORAGE_ACCOUNT.blob.core.windows.net
+remote_log_conn_id = azure_blob_logs
+
+# Local logging as fallback
+base_log_folder = /opt/airflow/logs
+
+[triggerer]
+# Triggerer is required for deferrable operators (async sensors)
+# Runs as separate ACA Container App (airflow-triggerer)
+# default_capacity = 1000  # concurrent triggers per triggerer instance
+
+[metrics]
+# Optional: StatsD for metrics
+# statsd_on = True
+# statsd_host = localhost
+# statsd_port = 8125

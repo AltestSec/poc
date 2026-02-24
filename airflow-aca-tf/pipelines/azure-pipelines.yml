@@ -1,0 +1,235 @@
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+  paths:
+    include:
+      - airflow-aca-tf/terraform/**
+
+parameters:
+  - name: environment
+    displayName: 'Environment'
+    type: string
+    default: 'poc'
+    values:
+      - poc
+      - prod
+  - name: action
+    displayName: 'Action'
+    type: string
+    default: 'plan'
+    values:
+      - plan
+      - apply
+      - destroy
+  - name: owner
+    displayName: 'Owner Email'
+    type: string
+    default: 'user@gmail.com'
+
+variables:
+  - name: terraformVersion
+    value: '1.5.0'
+  - name: workingDirectory
+    value: '$(System.DefaultWorkingDirectory)/airflow-aca-tf/terraform'
+  - name: backendResourceGroup
+    value: 'terraform-state-rg'
+  - name: backendStorageAccount
+    value: 'tfstateairflow'
+  - name: backendContainer
+    value: 'tfstate'
+
+stages:
+  - stage: Validate
+    displayName: 'Terraform Validate'
+    jobs:
+      - job: Validate
+        displayName: 'Validate Terraform'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: TerraformInstaller@0
+            displayName: 'Install Terraform'
+            inputs:
+              terraformVersion: $(terraformVersion)
+
+          - task: TerraformTaskV4@4
+            displayName: 'Terraform Init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: $(workingDirectory)
+              backendServiceArm: 'Azure-ServiceConnection'
+              backendAzureRmResourceGroupName: $(backendResourceGroup)
+              backendAzureRmStorageAccountName: $(backendStorageAccount)
+              backendAzureRmContainerName: $(backendContainer)
+              backendAzureRmKey: 'airflow-${{ parameters.environment }}.tfstate'
+
+          - task: TerraformTaskV4@4
+            displayName: 'Terraform Validate'
+            inputs:
+              provider: 'azurerm'
+              command: 'validate'
+              workingDirectory: $(workingDirectory)
+
+          - task: TerraformTaskV4@4
+            displayName: 'Terraform Format Check'
+            inputs:
+              provider: 'azurerm'
+              command: 'custom'
+              customCommand: 'fmt'
+              commandOptions: '-check -recursive'
+              workingDirectory: $(workingDirectory)
+
+  - stage: Plan
+    displayName: 'Terraform Plan'
+    dependsOn: Validate
+    condition: succeeded()
+    jobs:
+      - job: Plan
+        displayName: 'Plan Infrastructure'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: TerraformInstaller@0
+            displayName: 'Install Terraform'
+            inputs:
+              terraformVersion: $(terraformVersion)
+
+          - task: TerraformTaskV4@4
+            displayName: 'Terraform Init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: $(workingDirectory)
+              backendServiceArm: 'Azure-ServiceConnection'
+              backendAzureRmResourceGroupName: $(backendResourceGroup)
+              backendAzureRmStorageAccountName: $(backendStorageAccount)
+              backendAzureRmContainerName: $(backendContainer)
+              backendAzureRmKey: 'airflow-${{ parameters.environment }}.tfstate'
+
+          - task: TerraformTaskV4@4
+            displayName: 'Terraform Plan'
+            inputs:
+              provider: 'azurerm'
+              command: 'plan'
+              workingDirectory: $(workingDirectory)
+              commandOptions: '-var-file=environments/${{ parameters.environment }}/terraform.tfvars -var="owner=${{ parameters.owner }}" -out=tfplan'
+              environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+            env:
+              TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
+              TF_VAR_airflow_webserver_secret_key: $(AIRFLOW_WEBSERVER_SECRET_KEY)
+              TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish Plan'
+            inputs:
+              targetPath: '$(workingDirectory)/tfplan'
+              artifact: 'tfplan-${{ parameters.environment }}'
+              publishLocation: 'pipeline'
+
+  - stage: Apply
+    displayName: 'Terraform Apply'
+    dependsOn: Plan
+    condition: and(succeeded(), eq('${{ parameters.action }}', 'apply'))
+    jobs:
+      - deployment: Apply
+        displayName: 'Apply Infrastructure'
+        pool:
+          vmImage: 'ubuntu-latest'
+        environment: '${{ parameters.environment }}'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: DownloadPipelineArtifact@2
+                  displayName: 'Download Plan'
+                  inputs:
+                    artifact: 'tfplan-${{ parameters.environment }}'
+                    path: $(workingDirectory)
+
+                - task: TerraformInstaller@0
+                  displayName: 'Install Terraform'
+                  inputs:
+                    terraformVersion: $(terraformVersion)
+
+                - task: TerraformTaskV4@4
+                  displayName: 'Terraform Init'
+                  inputs:
+                    provider: 'azurerm'
+                    command: 'init'
+                    workingDirectory: $(workingDirectory)
+                    backendServiceArm: 'Azure-ServiceConnection'
+                    backendAzureRmResourceGroupName: $(backendResourceGroup)
+                    backendAzureRmStorageAccountName: $(backendStorageAccount)
+                    backendAzureRmContainerName: $(backendContainer)
+                    backendAzureRmKey: 'airflow-${{ parameters.environment }}.tfstate'
+
+                - task: TerraformTaskV4@4
+                  displayName: 'Terraform Apply'
+                  inputs:
+                    provider: 'azurerm'
+                    command: 'apply'
+                    workingDirectory: $(workingDirectory)
+                    commandOptions: 'tfplan'
+                    environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+
+                - task: Bash@3
+                  displayName: 'Build and Push Airflow Image to ACR'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      ACR_NAME=$(terraform output -raw acr_login_server | cut -d'.' -f1)
+                      az acr login --name $ACR_NAME
+                      
+                      cd $(System.DefaultWorkingDirectory)/airflow-aca/airflow
+                      docker build -t $ACR_NAME.azurecr.io/airflow:$(Build.BuildId) .
+                      docker push $ACR_NAME.azurecr.io/airflow:$(Build.BuildId)
+                      
+                      cd $(System.DefaultWorkingDirectory)/airflow-aca/airflow/etl-runner
+                      docker build -t $ACR_NAME.azurecr.io/etl-runner:$(Build.BuildId) .
+                      docker push $ACR_NAME.azurecr.io/etl-runner:$(Build.BuildId)
+                    workingDirectory: $(workingDirectory)
+
+  - stage: Destroy
+    displayName: 'Terraform Destroy'
+    dependsOn: Validate
+    condition: and(succeeded(), eq('${{ parameters.action }}', 'destroy'))
+    jobs:
+      - job: Destroy
+        displayName: 'Destroy Infrastructure'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: TerraformInstaller@0
+            displayName: 'Install Terraform'
+            inputs:
+              terraformVersion: $(terraformVersion)
+
+          - task: TerraformTaskV4@4
+            displayName: 'Terraform Init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: $(workingDirectory)
+              backendServiceArm: 'Azure-ServiceConnection'
+              backendAzureRmResourceGroupName: $(backendResourceGroup)
+              backendAzureRmStorageAccountName: $(backendStorageAccount)
+              backendAzureRmContainerName: $(backendContainer)
+              backendAzureRmKey: 'airflow-${{ parameters.environment }}.tfstate'
+
+          - task: TerraformTaskV4@4
+            displayName: 'Terraform Destroy'
+            inputs:
+              provider: 'azurerm'
+              command: 'destroy'
+              workingDirectory: $(workingDirectory)
+              commandOptions: '-var-file=environments/${{ parameters.environment }}/terraform.tfvars -var="owner=${{ parameters.owner }}"'
+              environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+            env:
+              TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
+              TF_VAR_airflow_webserver_secret_key: $(AIRFLOW_WEBSERVER_SECRET_KEY)
+              TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)
