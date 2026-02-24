@@ -49,7 +49,7 @@ stages:
         pool:
           vmImage: 'ubuntu-latest'
         steps:
-          - task: TerraformInstaller@0
+          - task: TerraformInstaller@1
             displayName: 'Install Terraform'
             inputs:
               terraformVersion: $(terraformVersion)
