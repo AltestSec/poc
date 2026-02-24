@@ -30,7 +30,7 @@ parameters:
 
 variables:
   - name: terraformVersion
-    value: '1.5.0'
+    value: '1.7.0'
   - name: workingDirectory
     value: '$(System.DefaultWorkingDirectory)/airflow-aca-tf/terraform'
   - name: backendResourceGroup
@@ -49,10 +49,10 @@ stages:
         pool:
           vmImage: 'ubuntu-latest'
         steps:
-          - task: TerraformInstaller@0
+          - task: TerraformInstaller@1
             displayName: 'Install Terraform'
             inputs:
-              terraformVersion: $(terraformVersion)
+              terraformVersion: ${{ variables.terraformVersion }}
 
           - task: TerraformTaskV4@4
             displayName: 'Terraform Init'
