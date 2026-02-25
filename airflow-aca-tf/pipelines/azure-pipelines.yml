@@ -33,7 +33,7 @@ variables:
     value: '1.7.0'
   - name: workingDirectory
     value: '$(System.DefaultWorkingDirectory)/airflow-aca-tf/terraform'
-  - group: my-variable-group
+  - group: ETL-TFSTATE-BACK
   - name: backendResourceGroup
     value: $[backendResourceGroup]
   - name: backendStorageAccount
