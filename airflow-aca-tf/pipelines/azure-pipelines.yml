@@ -175,7 +175,9 @@ stages:
             env:
               TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
               TF_VAR_airflow_webserver_secret_key: $(AIRFLOW_WEBSERVER_SECRET_KEY)
-              TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)   
+              TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)  
+              TF_VAR_owner: $(Build.RequestedForEmail)
+              TF_VAR_duedate: $(DUE_DATE) 
                 
 
           - task: PublishPipelineArtifact@1
@@ -255,6 +257,8 @@ stages:
                     TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
                     TF_VAR_airflow_webserver_secret_key: $(AIRFLOW_WEBSERVER_SECRET_KEY)
                     TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)
+                    TF_VAR_owner: $(Build.RequestedForEmail)
+                    TF_VAR_duedate: $(DUE_DATE)
 
                 #- task: Bash@3
                 - task: AzureCLI@2
@@ -321,3 +325,5 @@ stages:
               TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
               TF_VAR_airflow_webserver_secret_key: $(AIRFLOW_WEBSERVER_SECRET_KEY)
               TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)
+              TF_VAR_owner: $(Build.RequestedForEmail)
+              TF_VAR_duedate: $(DUE_DATE)

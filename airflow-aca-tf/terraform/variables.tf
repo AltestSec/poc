@@ -87,11 +87,9 @@ variable "acr_sku" {
 variable "owner" {
   description = "Owner email for tagging"
   type        = string
-  default     = "user@gmail.com"
 }
 
 variable "duedate" {
   description = "Due date for tagging"
   type        = string
-  default     = "6march"
 }

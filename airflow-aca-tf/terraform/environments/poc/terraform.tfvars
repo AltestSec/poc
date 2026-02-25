@@ -1,5 +1,5 @@
-env_name            = "airflow-poc"
-location            = "westeurope"
+env_name = "airflow-poc"
+location = "westeurope"
 # need to remove this hardcode
 resource_group_name = "merzlikin-tf-state-rg"
 deployment_mode     = "poc"
@@ -13,5 +13,3 @@ redis_family      = "C"
 redis_capacity    = 1
 acr_sku           = "Basic"
 
-owner   = "user@gmail.com"
-duedate = "6march"
