@@ -118,25 +118,46 @@ stages:
               backendAzureRmContainerName: $(backendContainer)
               backendAzureRmKey: 'airflow-${{ parameters.environment }}.tfstate'
 
-          - task: TerraformTask@5
-            displayName: 'Terraform Plan'
+          # - task: TerraformTask@5
+          #   displayName: 'Terraform Plan'
+          #   inputs:
+          #     provider: 'azurerm'
+          #     command: 'plan'
+          #     workingDirectory: $(workingDirectory)
+          #     commandOptions: '-var-file=environments/${{ parameters.environment }}/terraform.tfvars -var="owner=$(ownerIF)" -out=tfplan'
+          #     environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+          #   env:
+          #     TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
+          #     TF_VAR_airflow_webserver_secret_key: $(AIRFLOW_WEBSERVER_SECRET_KEY)
+          #     TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)
+          - task: AzureCLI@2
+            displayName: Terraform plan
             inputs:
-              provider: 'azurerm'
-              command: 'plan'
-              workingDirectory: $(workingDirectory)
-              commandOptions: '-var-file=environments/${{ parameters.environment }}/terraform.tfvars -var="owner=$(ownerIF)" -out=tfplan'
-              environmentServiceNameAzureRM: 'Azure-ServiceConnection'
-            env:
-              TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
-              TF_VAR_airflow_webserver_secret_key: $(AIRFLOW_WEBSERVER_SECRET_KEY)
-              TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)
+              azureSubscription: 'Azure-ServiceConnection'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+                cd $(workingDirectory)
 
-          - task: PublishPipelineArtifact@1
-            displayName: 'Publish Plan'
-            inputs:
-              targetPath: '$(workingDirectory)/tfplan'
-              artifact: 'tfplan-${{ parameters.environment }}'
-              publishLocation: 'pipeline'
+                terraform init -input=false -reconfigure \
+                  -backend-config="resource_group_name=$(backendResourceGroup)" \
+                  -backend-config="storage_account_name=$(backendStorageAccount)" \
+                  -backend-config="container_name=$(backendContainer)" \
+                  -backend-config="key=airflow-${{ parameters.environment }}.tfstate"
+
+                terraform plan \
+                  -var-file="environments/${{ parameters.environment }}/terraform.tfvars" \
+                  -var="owner=$(ownerEffective)" \
+                  -out=tfplan \
+                  -detailed-exitcode
+
+                    - task: PublishPipelineArtifact@1
+                      displayName: 'Publish Plan'
+                      inputs:
+                        targetPath: '$(workingDirectory)/tfplan'
+                        artifact: 'tfplan-${{ parameters.environment }}'
+                        publishLocation: 'pipeline'
 
   - stage: Apply
     displayName: 'Terraform Apply'
