@@ -23,14 +23,16 @@ parameters:
       - plan
       - apply
       - destroy
-  - name: owner
-    displayName: 'Owner Email'
-    type: string
-    default: 'user@gmail.com'
+  # - name: owner
+  #   displayName: 'Owner Email'
+  #   type: string
+  #   default: 'user@gmail.com'
 
 variables:
   - name: terraformVersion
     value: '1.7.0'
+  - name: owner
+    value: $(Build.RequestedForEmail)
   - name: workingDirectory
     value: '$(System.DefaultWorkingDirectory)/airflow-aca-tf/terraform'
   - group: ETL-TFSTATE-BACK
@@ -180,6 +182,7 @@ stages:
                 set -euo pipefail
                 cd $(workingDirectory)
 
+                echo -e "\nUnlock tfstate if it is locked\n"
                 # Read blob metadata to see if Terraform lock exists
                 LOCK_ID=$(
                   az storage blob metadata show \
@@ -206,6 +209,7 @@ stages:
                   -backend-config="key=tfstate/airflow-${{ parameters.environment }}.tfstate"
 
                 terraform plan \
+                  -input=false -lock-timeout=30s -detailed-exitcode \
                   -var-file="environments/${{ parameters.environment }}/terraform.tfvars" \
                   -var="owner=$(ownerIF)" \
                   -out=tfplan \
