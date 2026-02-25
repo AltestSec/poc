@@ -20,7 +20,7 @@ locals {
   redis_port = azurerm_redis_cache.redis.port
   redis_key  = azurerm_redis_cache.redis.primary_access_key
 
-  airflow_celery_broker = "redis://:${local.redis_key}@${local.redis_host}:${local.redis_port}/0"
+  airflow_celery_broker  = "redis://:${local.redis_key}@${local.redis_host}:${local.redis_port}/0"
   airflow_result_backend = "db+${local.airflow_sqlalchemy_conn}"
 
   # Concurrency defaults for your case (~10 parallel job)

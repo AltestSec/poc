@@ -18,7 +18,7 @@ resource "azapi_resource" "worker" {
       configuration = {
         secrets = [
           { name = "redispass", value = azurerm_redis_cache.redis.primary_access_key },
-          { name = "safile",    value = azurerm_storage_account.sa.primary_access_key }
+          { name = "safile", value = azurerm_storage_account.sa.primary_access_key }
         ]
       }
 

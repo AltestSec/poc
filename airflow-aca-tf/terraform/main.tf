@@ -1,6 +1,6 @@
 terraform {
   required_version = ">= 1.5.0"
-  
+
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
@@ -102,44 +102,44 @@ module "managed_identity" {
 }
 
 module "aca_environment" {
-  source                     = "./modules/aca_environment"
-  name                       = "${var.env_name}-env"
-  location                   = azurerm_resource_group.main.location
-  resource_group_name        = azurerm_resource_group.main.name
-  log_analytics_workspace_id = module.log_analytics.workspace_id
+  source                      = "./modules/aca_environment"
+  name                        = "${var.env_name}-env"
+  location                    = azurerm_resource_group.main.location
+  resource_group_name         = azurerm_resource_group.main.name
+  log_analytics_workspace_id  = module.log_analytics.workspace_id
   log_analytics_workspace_key = module.log_analytics.primary_shared_key
-  storage_account_name       = module.storage.storage_account_name
-  storage_account_key        = module.storage.storage_account_key
-  file_share_name            = module.storage.dags_share_name
-  tags                       = local.common_tags
+  storage_account_name        = module.storage.storage_account_name
+  storage_account_key         = module.storage.storage_account_key
+  file_share_name             = module.storage.dags_share_name
+  tags                        = local.common_tags
 }
 
 module "container_apps" {
-  source                      = "./modules/container_apps"
-  env_name                    = var.env_name
-  location                    = azurerm_resource_group.main.location
-  resource_group_name         = azurerm_resource_group.main.name
-  aca_environment_id          = module.aca_environment.environment_id
-  aca_storage_name            = module.aca_environment.storage_name
-  acr_login_server            = module.acr.login_server
-  airflow_image               = var.airflow_image
-  etl_runner_image            = var.etl_runner_image
-  airflow_fernet_key          = var.airflow_fernet_key
+  source                       = "./modules/container_apps"
+  env_name                     = var.env_name
+  location                     = azurerm_resource_group.main.location
+  resource_group_name          = azurerm_resource_group.main.name
+  aca_environment_id           = module.aca_environment.environment_id
+  aca_storage_name             = module.aca_environment.storage_name
+  acr_login_server             = module.acr.login_server
+  airflow_image                = var.airflow_image
+  etl_runner_image             = var.etl_runner_image
+  airflow_fernet_key           = var.airflow_fernet_key
   airflow_webserver_secret_key = var.airflow_webserver_secret_key
-  postgres_host               = module.postgresql.fqdn
-  postgres_password           = var.postgres_admin_password
-  redis_host                  = module.redis.hostname
-  redis_primary_key           = module.redis.primary_access_key
-  storage_account_name        = module.storage.storage_account_name
-  deployment_mode             = var.deployment_mode
-  scheduler_identity_id       = module.managed_identity.scheduler_identity_id
-  worker_identity_id          = module.managed_identity.worker_identity_id
-  webserver_identity_id       = module.managed_identity.webserver_identity_id
-  triggerer_identity_id       = module.managed_identity.triggerer_identity_id
-  scheduler_principal_id      = module.managed_identity.scheduler_principal_id
-  worker_principal_id         = module.managed_identity.worker_principal_id
-  storage_account_id          = module.storage.storage_account_id
-  tags                        = local.common_tags
+  postgres_host                = module.postgresql.fqdn
+  postgres_password            = var.postgres_admin_password
+  redis_host                   = module.redis.hostname
+  redis_primary_key            = module.redis.primary_access_key
+  storage_account_name         = module.storage.storage_account_name
+  deployment_mode              = var.deployment_mode
+  scheduler_identity_id        = module.managed_identity.scheduler_identity_id
+  worker_identity_id           = module.managed_identity.worker_identity_id
+  webserver_identity_id        = module.managed_identity.webserver_identity_id
+  triggerer_identity_id        = module.managed_identity.triggerer_identity_id
+  scheduler_principal_id       = module.managed_identity.scheduler_principal_id
+  worker_principal_id          = module.managed_identity.worker_principal_id
+  storage_account_id           = module.storage.storage_account_id
+  tags                         = local.common_tags
 }
 
 data "azurerm_client_config" "current" {}

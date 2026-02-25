@@ -3,10 +3,10 @@ resource "azurerm_postgresql_flexible_server" "postgres" {
   resource_group_name = var.resource_group_name
   location            = var.location
   version             = "16"
-  
+
   administrator_login    = "airflow"
   administrator_password = var.admin_password
-  
+
   sku_name   = var.sku_name
   storage_mb = 32768
 

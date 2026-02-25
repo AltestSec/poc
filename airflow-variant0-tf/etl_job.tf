@@ -1,7 +1,7 @@
 resource "azurerm_container_app_job" "etl" {
-  name                        = "${var.prefix}-etl"
-  resource_group_name         = azurerm_resource_group.rg.name
-  location                    = azurerm_resource_group.rg.location
+  name                         = "${var.prefix}-etl"
+  resource_group_name          = azurerm_resource_group.rg.name
+  location                     = azurerm_resource_group.rg.location
   container_app_environment_id = azurerm_container_app_environment.cae.id
 
   replica_timeout_in_seconds = 3600

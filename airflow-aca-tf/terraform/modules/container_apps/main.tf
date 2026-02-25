@@ -2,17 +2,17 @@ locals {
   scheduler_cpu = var.deployment_mode == "production" ? 1.0 : 0.5
   scheduler_mem = var.deployment_mode == "production" ? "2Gi" : "1Gi"
   scheduler_min = var.deployment_mode == "production" ? 2 : 1
-  
+
   webserver_cpu = var.deployment_mode == "production" ? 0.5 : 0.25
   webserver_mem = var.deployment_mode == "production" ? "1Gi" : "0.5Gi"
   webserver_min = var.deployment_mode == "production" ? 1 : 0
-  
+
   worker_cpu = var.deployment_mode == "production" ? 1.0 : 0.5
   worker_mem = var.deployment_mode == "production" ? "2Gi" : "1Gi"
-  
+
   pg_conn_str = "postgresql://airflow:${var.postgres_password}@${var.postgres_host}/airflow?sslmode=require"
   redis_url   = "rediss://:${var.redis_primary_key}@${var.redis_host}:6380/0"
-  
+
   common_env = [
     { name = "AIRFLOW__CORE__EXECUTOR", value = "CeleryExecutor" },
     { name = "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN", value = local.pg_conn_str },

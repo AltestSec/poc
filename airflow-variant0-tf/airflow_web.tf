@@ -1,8 +1,8 @@
 resource "azurerm_container_app" "web" {
-  name                        = "${var.prefix}-web"
+  name                         = "${var.prefix}-web"
   container_app_environment_id = azurerm_container_app_environment.cae.id
-  resource_group_name         = azurerm_resource_group.rg.name
-  revision_mode               = "Single"
+  resource_group_name          = azurerm_resource_group.rg.name
+  revision_mode                = "Single"
 
   identity {
     type         = "UserAssigned"
