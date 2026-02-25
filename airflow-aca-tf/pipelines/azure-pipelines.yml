@@ -31,14 +31,14 @@ parameters:
 variables:
   - name: terraformVersion
     value: '1.7.0'
-  - name: owner
+  - name: ownerIF
     value: $(Build.RequestedForEmail)
   - name: workingDirectory
     value: '$(System.DefaultWorkingDirectory)/airflow-aca-tf/terraform'
   - group: ETL-TFSTATE-BACK
   - group: tags
-  - name: ownerIF
-    value: $[ coalesce(variables['owner'], '${{ parameters.owner }}') ]
+  # - name: ownerIF
+  #   value: $[ coalesce(variables['owner'] ]
   # - name: backendResourceGroup
   #   value: $[variables.backendResourceGroup]
   # - name: backendStorageAccount
