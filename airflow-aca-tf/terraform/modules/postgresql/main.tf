@@ -1,3 +1,8 @@
+locals {
+  is_burstable = can(regex("^B_", var.sku_name))
+  ha_mode = local.is_burstable ? "Disabled" : var.high_availability_mode
+}
+
 resource "azurerm_postgresql_flexible_server" "postgres" {
   name                = var.name
   resource_group_name = var.resource_group_name
@@ -13,9 +18,12 @@ resource "azurerm_postgresql_flexible_server" "postgres" {
   backup_retention_days        = 7
   geo_redundant_backup_enabled = false
 
-  high_availability {
-    mode = var.deployment_mode == "production" ? "ZoneRedundant" : "SameZone"
-  }
+  #dynamic "high_availability" {
+  #  for_each = local.ha_mode == "SameZone" ? [] : [1]
+  #  content {
+  #    mode = local.ha_mode
+  #  }
+  #}
 
   tags = var.tags
 }

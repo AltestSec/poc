@@ -30,6 +30,7 @@ locals {
     duedate     = var.duedate
     managedwith = "terraform"
   }
+  prefix    = om
 }
 
 data "azurerm_resource_group" "main" {
@@ -46,7 +47,7 @@ module "log_analytics" {
 
 module "key_vault" {
   source              = "./modules/key_vault"
-  name                = "${var.env_name}-kv"
+  name                = "${local.prefix}-${var.env_name}-kv"
   location            = data.azurerm_resource_group.main.location
   resource_group_name = data.azurerm_resource_group.main.name
   tenant_id           = data.azurerm_client_config.current.tenant_id

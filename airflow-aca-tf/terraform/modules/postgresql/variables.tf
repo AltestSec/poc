@@ -34,3 +34,19 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "deployment_mode" {
+  type    = string
+  default = "dev"
+}
+
+variable "sku_name" {
+  type = string
+  # possible types "B_Standard_B1ms" (burstable) or "GP_Standard_D2s_v3"
+}
+
+variable "high_availability_mode" {
+  type        = string
+  description = "Allowed: SameZone | ZoneRedundant"
+  default     = "Disabled"
+}
