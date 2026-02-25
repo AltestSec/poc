@@ -85,6 +85,7 @@ stages:
               customCommand: 'fmt'
               commandOptions: '-check -recursive'
               workingDirectory: $(workingDirectory)
+              environmentServiceNameAzureRM: 'YOUR_AZURE_SERVICE_CONNECTION_NAME'
 
   - stage: Plan
     displayName: 'Terraform Plan'
