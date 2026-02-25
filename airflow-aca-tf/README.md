@@ -97,6 +97,30 @@ az storage container create \
   --name tfstate \
   --account-name tfstateairflow
 ```
+az role assignment create \
+  --assignee-object-id <SPid> \
+  --assignee-principal-type ServicePrincipal \
+  --role "Storage Account Blob Contributor" \
+  --scope /subscriptions/<sub_id>
+
+az provider register -n Microsoft.CustomProviders
+az provider register -n Microsoft.DocumentDB
+az provider register -n Microsoft.ContainerInstance
+az provider register -n Microsoft.Databricks
+az provider register -n Microsoft.EventGrid
+az provider register -n Microsoft.ManagedServices
+
+provider "azurerm" {
+  features {}
+  skip_provider_registration = true
+}
+
+az role assignment create \
+  --assignee-object-id <SPid> \
+  --assignee-principal-type ServicePrincipal \
+  --role "Contributor" \
+  --scope /subscriptions/<sub_id>
+
 
 ### 4. Deploy Infrastructure
 

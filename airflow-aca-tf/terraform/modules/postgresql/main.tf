@@ -14,7 +14,7 @@ resource "azurerm_postgresql_flexible_server" "postgres" {
   geo_redundant_backup_enabled = false
 
   high_availability {
-    mode = var.deployment_mode == "production" ? "ZoneRedundant" : "Disabled"
+    mode = var.deployment_mode == "production" ? "ZoneRedundant" : "SameZone"
   }
 
   tags = var.tags
