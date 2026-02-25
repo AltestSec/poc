@@ -206,7 +206,7 @@ stages:
                   -backend-config="resource_group_name=$(backendResourceGroup)" \
                   -backend-config="storage_account_name=$(backendStorageAccount)" \
                   -backend-config="container_name=$(backendContainer)" \
-                  -backend-config="key=tfstate/airflow-${{ parameters.environment }}.tfstate"
+                  -backend-config="key=airflow-${{ parameters.environment }}.tfstate"
 
                 terraform plan \
                   -input=false -lock-timeout=30s -detailed-exitcode \
