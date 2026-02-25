@@ -1,6 +1,7 @@
 env_name            = "airflow-poc"
 location            = "westeurope"
-resource_group_name = "airflow-poc-rg"
+# need to remove this hardcode
+resource_group_name = "merzlikin-tf-state-rg"
 deployment_mode     = "poc"
 
 airflow_image    = "apache/airflow:2.9.3"
