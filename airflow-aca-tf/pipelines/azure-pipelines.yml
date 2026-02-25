@@ -165,10 +165,10 @@ stages:
                         targetPath: '$(workingDirectory)/tfplan'
                         artifact: 'tfplan-${{ parameters.environment }}'
                         publishLocation: 'pipeline'
-              env:
-                TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
-                TF_VAR_airflow_webserver_secret_key: $(AIRFLOW_WEBSERVER_SECRET_KEY)
-                TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)
+            env:
+              TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
+              TF_VAR_airflow_webserver_secret_key: $(AIRFLOW_WEBSERVER_SECRET_KEY)
+              TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)
 
   - stage: Apply
     displayName: 'Terraform Apply'
