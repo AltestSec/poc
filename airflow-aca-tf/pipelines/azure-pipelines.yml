@@ -33,12 +33,13 @@ variables:
     value: '1.7.0'
   - name: workingDirectory
     value: '$(System.DefaultWorkingDirectory)/airflow-aca-tf/terraform'
+  - group: my-variable-group
   - name: backendResourceGroup
-    value: 'terraform-state-rg'
+    value: $[backendResourceGroup]
   - name: backendStorageAccount
-    value: 'tfstateairflow'
+    value: $[backendStorageAccount]
   - name: backendContainer
-    value: 'tfstate'
+    value: $[backendContainer]
 
 stages:
   - stage: Validate
