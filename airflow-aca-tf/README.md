@@ -23,6 +23,28 @@ This Terraform configuration deploys the same architecture as the Bicep version:
 - Azure subscription with appropriate permissions
 - Azure DevOps project (for pipeline)
 
+### Important: Provider Registration
+
+This Terraform configuration uses `skip_provider_registration = true` to avoid requiring wide permissions on the Service Principal. Before running Terraform, ensure the following Azure resource providers are registered in your subscription:
+
+```bash
+# Register required resource providers (requires Subscription Contributor or Owner role)
+az provider register --namespace Microsoft.App
+az provider register --namespace Microsoft.ContainerRegistry
+az provider register --namespace Microsoft.Storage
+az provider register --namespace Microsoft.DBforPostgreSQL
+az provider register --namespace Microsoft.Cache
+az provider register --namespace Microsoft.KeyVault
+az provider register --namespace Microsoft.OperationalInsights
+az provider register --namespace Microsoft.ManagedIdentity
+
+# Check registration status
+az provider show --namespace Microsoft.App --query "registrationState"
+az provider show --namespace Microsoft.ContainerRegistry --query "registrationState"
+```
+
+**Note:** Provider registration is a one-time operation per subscription and requires elevated permissions. After registration, the Service Principal used by Terraform only needs Contributor role on the resource group.
+
 ## Project Structure
 
 ```
@@ -250,7 +272,45 @@ Parameters:
 
 ## Customization
 
+### Use Custom Prefix for Unique Resource Names
+
+By default, resources are named using `env_name` only (e.g., `airflow-poc-pg`, `airflowpocacr`). To ensure globally unique names (especially for ACR, Storage, and Key Vault), you can provide a custom prefix that will be combined with the environment name:
+
+**Naming Pattern:**
+- **Without prefix:** `{env_name}-{resource}` → `airflow-poc-pg`
+- **With prefix:** `{prefix}-{env_name}-{resource}` → `merzlikin-airflow-poc-pg`
+
+Via Terraform CLI:
+```bash
+terraform apply \
+  -var-file=environments/poc/terraform.tfvars \
+  -var="prefix=merzlikin"
+```
+
+Via `terraform.tfvars`:
+```hcl
+prefix = "merzlikin"
+```
+
+This will create resources like:
+- ACR: `merzlikinairflowpocacr` (hyphens removed)
+- Storage: `merzlikinairflowpocstor` (hyphens removed)
+- Key Vault: `merzlikin-airflow-poc-kv`
+- PostgreSQL: `merzlikin-airflow-poc-pg`
+- Redis: `merzlikin-airflow-poc-redis`
+- Log Analytics: `merzlikin-airflow-poc-logs`
+
+**Benefits:**
+- Globally unique names across Azure
+- Clear identification of ownership
+- Environment name still visible in resource names
+- Easy to filter resources by prefix in Azure Portal
+
+**Note:** ACR and Storage names must be globally unique and cannot contain hyphens.
+
 ### Override Tags
+
+Tags are configured via pipeline parameters and variables:
 
 Via pipeline parameter:
 ```yaml

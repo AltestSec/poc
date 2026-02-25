@@ -8,7 +8,39 @@ This guide walks you through setting up the Azure DevOps pipeline for deploying 
 - Azure subscription with Owner or Contributor role
 - Repository connected to Azure DevOps
 
-## Step 1: Create Azure Service Connection
+## Step 1: Register Azure Resource Providers
+
+**Important:** Before creating the service connection, ensure required Azure resource providers are registered. This is a one-time operation per subscription and requires Subscription Contributor or Owner role.
+
+```bash
+# Login to Azure
+az login
+az account set --subscription <your-subscription-id>
+
+# Register required resource providers
+az provider register --namespace Microsoft.App
+az provider register --namespace Microsoft.ContainerRegistry
+az provider register --namespace Microsoft.Storage
+az provider register --namespace Microsoft.DBforPostgreSQL
+az provider register --namespace Microsoft.Cache
+az provider register --namespace Microsoft.KeyVault
+az provider register --namespace Microsoft.OperationalInsights
+az provider register --namespace Microsoft.ManagedIdentity
+
+# Verify registration (should show "Registered")
+az provider show --namespace Microsoft.App --query "registrationState" -o tsv
+az provider show --namespace Microsoft.ContainerRegistry --query "registrationState" -o tsv
+az provider show --namespace Microsoft.Storage --query "registrationState" -o tsv
+az provider show --namespace Microsoft.DBforPostgreSQL --query "registrationState" -o tsv
+az provider show --namespace Microsoft.Cache --query "registrationState" -o tsv
+az provider show --namespace Microsoft.KeyVault --query "registrationState" -o tsv
+az provider show --namespace Microsoft.OperationalInsights --query "registrationState" -o tsv
+az provider show --namespace Microsoft.ManagedIdentity --query "registrationState" -o tsv
+```
+
+**Why this is needed:** The Terraform configuration uses `skip_provider_registration = true` to avoid requiring wide permissions on the Service Principal. After providers are registered, the Service Principal only needs Contributor role on the resource group.
+
+## Step 2: Create Azure Service Connection
 
 1. Navigate to your Azure DevOps project
 2. Go to **Project Settings** (bottom left)
@@ -23,7 +55,7 @@ This guide walks you through setting up the Azure DevOps pipeline for deploying 
    - Grant access permission to all pipelines: ✓
 8. Click **Save**
 
-## Step 2: Create Terraform State Storage
+## Step 3: Create Terraform State Storage
 
 The pipeline requires a storage account for Terraform state. Create it manually:
 
@@ -50,7 +82,7 @@ az storage container create \
   --account-name tfstateairflow
 ```
 
-## Step 3: Create Variable Library
+## Step 4: Create Variable Library
 
 1. In Azure DevOps, go to **Pipelines** → **Library**
 2. Click **+ Variable group**
@@ -81,7 +113,7 @@ openssl rand -base64 32
 5. Click the lock icon next to each variable to mark it as secret
 6. Click **Save**
 
-## Step 4: Create Environments
+## Step 5: Create Environments
 
 1. Go to **Pipelines** → **Environments**
 2. Click **New environment**
@@ -102,7 +134,7 @@ openssl rand -base64 32
   - Add approvers (team members who can approve production deployments)
   - Click **Create**
 
-## Step 5: Create Pipeline
+## Step 6: Create Pipeline
 
 1. Go to **Pipelines** → **Pipelines**
 2. Click **New pipeline**
@@ -114,7 +146,7 @@ openssl rand -base64 32
 8. Review the pipeline YAML
 9. Click **Save** (don't run yet)
 
-## Step 6: Link Variable Library to Pipeline
+## Step 7: Link Variable Library to Pipeline
 
 1. Click **Edit** on your pipeline
 2. Click the three dots (⋮) → **Triggers**
@@ -125,7 +157,7 @@ openssl rand -base64 32
 7. Click **Link**
 8. Click **Save**
 
-## Step 7: Grant Pipeline Permissions
+## Step 8: Grant Pipeline Permissions
 
 The pipeline needs permissions to access the service connection and environments:
 
@@ -134,7 +166,7 @@ The pipeline needs permissions to access the service connection and environments
 3. Click the three dots (⋮) → **Security**
 4. Add your pipeline to the list of authorized pipelines
 
-## Step 8: Run Pipeline
+## Step 9: Run Pipeline
 
 ### First Run (Plan)
 

@@ -3,6 +3,12 @@ variable "env_name" {
   type        = string
 }
 
+variable "prefix" {
+  description = "Optional prefix for unique resource naming. Will be combined with env_name: {prefix}-{env_name}-{resource}. If not provided, only env_name will be used."
+  type        = string
+  default     = ""
+}
+
 variable "location" {
   description = "Azure region"
   type        = string

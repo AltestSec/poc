@@ -14,7 +14,7 @@ variable "resource_group_name" {
 }
 
 variable "sku_name" {
-  description = "PostgreSQL SKU name"
+  description = "PostgreSQL SKU name (e.g., B_Standard_B1ms for burstable or GP_Standard_D2s_v3 for general purpose)"
   type        = string
 }
 
@@ -33,20 +33,4 @@ variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)
   default     = {}
-}
-
-variable "deployment_mode" {
-  type    = string
-  default = "dev"
-}
-
-variable "sku_name" {
-  type = string
-  # possible types "B_Standard_B1ms" (burstable) or "GP_Standard_D2s_v3"
-}
-
-variable "high_availability_mode" {
-  type        = string
-  description = "Allowed: SameZone | ZoneRedundant"
-  default     = "Disabled"
 }
