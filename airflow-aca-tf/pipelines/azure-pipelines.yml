@@ -229,16 +229,24 @@ stages:
                   inputs:
                     provider: 'azurerm'
                     command: 'apply'
+                    backendServiceArm: 'Azure-ServiceConnection'
                     workingDirectory: $(workingDirectory)
                     commandOptions: 'tfplan'
                     environmentServiceNameAzureRM: 'Azure-ServiceConnection'
 
-                - task: Bash@3
+                #- task: Bash@3
+                - task: AzureCLI@2
                   displayName: 'Build and Push Airflow Image to ACR'
-                  inputs:
-                    targetType: 'inline'
-                    script: |
-                      ACR_NAME=$(terraform output -raw acr_login_server | cut -d'.' -f1)
+                  inputs: 
+                    azureSubscription: 'Azure-ServiceConnection'
+                    scriptType: Bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      cd "$(workingDirectory)"
+
+                      ACR_LOGIN_SERVER="$(terraform output -raw acr_login_server)"
+                      ACR_NAME="$(echo "$ACR_LOGIN_SERVER" | cut -d'.' -f1)"
                       az acr login --name $ACR_NAME
                       
                       cd $(System.DefaultWorkingDirectory)/airflow-aca/airflow
