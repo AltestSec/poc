@@ -249,7 +249,7 @@ stages:
                         -backend-config="container_name=$(backendContainer)" \
                         -backend-config="key=airflow-${{ parameters.environment }}.tfstate"
 
-                    terraform apply -input=false -auto-approve tfplan
+                      terraform apply -input=false -auto-approve tfplan
                   env:
                     TF_IN_AUTOMATION: "true"
                     TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
