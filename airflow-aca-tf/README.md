@@ -22,6 +22,23 @@ This Terraform configuration deploys the same architecture as the Bicep version:
 - Terraform 1.5.0+
 - Azure subscription with appropriate permissions
 - Azure DevOps project (for pipeline)
+- **Pre-existing Resource Group** (not managed by Terraform)
+
+### Important: Resource Group
+
+The resource group must be created manually before running Terraform. Terraform will use it as a data source but will not manage it.
+
+```bash
+# Create resource group (one-time operation)
+az group create \
+  --name merzlikin-tf-state-rg \
+  --location westeurope
+```
+
+Update `terraform.tfvars` with your resource group name:
+```hcl
+resource_group_name = "merzlikin-tf-state-rg"
+```
 
 ### Important: Provider Registration
 
