@@ -87,6 +87,12 @@ variable "deployment_mode" {
   type        = string
 }
 
+variable "enable_etl_job" {
+  description = "Enable ETL runner job"
+  type        = bool
+  default     = false
+}
+
 variable "scheduler_identity_id" {
   description = "Scheduler managed identity ID"
   type        = string

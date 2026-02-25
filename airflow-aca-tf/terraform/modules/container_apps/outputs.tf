@@ -25,5 +25,5 @@ output "triggerer_id" {
 
 output "etl_runner_job_id" {
   description = "ETL runner job ID"
-  value       = azurerm_container_app_job.etl_runner.id
+  value       = var.enable_etl_job ? azurerm_container_app_job.etl_runner[0].id : null
 }

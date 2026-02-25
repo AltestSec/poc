@@ -6,8 +6,9 @@ deployment_mode     = "production"
 # Prefix for globally unique resource names (ACR, Storage, Key Vault)
 prefix = "merzlikin"
 
-airflow_image    = "apache/airflow:2.9.3"
-etl_runner_image = "ghcr.io/your-org/etl-runner:latest"
+airflow_image = "apache/airflow:2.9.3"
+# Using Microsoft quickstart image for testing (replace with your own later)
+etl_runner_image = "mcr.microsoft.com/k8se/quickstart-jobs:latest"
 
 postgres_sku_name = "GP_Standard_D2ds_v4"
 redis_sku_name    = "Premium"

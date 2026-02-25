@@ -138,6 +138,7 @@ module "container_apps" {
   redis_primary_key            = module.redis.primary_access_key
   storage_account_name         = module.storage.storage_account_name
   deployment_mode              = var.deployment_mode
+  enable_etl_job               = var.enable_etl_job
   scheduler_identity_id        = module.managed_identity.scheduler_identity_id
   worker_identity_id           = module.managed_identity.worker_identity_id
   webserver_identity_id        = module.managed_identity.webserver_identity_id

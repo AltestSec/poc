@@ -30,6 +30,12 @@ variable "deployment_mode" {
   }
 }
 
+variable "enable_etl_job" {
+  description = "Enable ETL runner job (set to false if you don't have etl-runner image yet)"
+  type        = bool
+  default     = true
+}
+
 variable "airflow_image" {
   description = "Container image for Airflow components"
   type        = string
@@ -39,7 +45,7 @@ variable "airflow_image" {
 variable "etl_runner_image" {
   description = "ETL runner image (DBT or custom)"
   type        = string
-  default     = "ghcr.io/your-org/etl-runner:latest"
+  default     = "mcr.microsoft.com/k8se/quickstart-jobs:latest"
 }
 
 variable "airflow_fernet_key" {
@@ -63,7 +69,7 @@ variable "postgres_admin_password" {
 variable "postgres_sku_name" {
   description = "PostgreSQL SKU name"
   type        = string
-  default     = "B_Standard_B1ms"
+  default     = "Standard_B1ms"
 }
 
 variable "redis_sku_name" {

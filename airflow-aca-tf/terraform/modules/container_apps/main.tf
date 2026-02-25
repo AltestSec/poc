@@ -265,8 +265,10 @@ resource "azurerm_container_app" "worker" {
   tags = var.tags
 }
 
-# ETL Runner Job
+# ETL Runner Job (optional)
 resource "azurerm_container_app_job" "etl_runner" {
+  count = var.enable_etl_job ? 1 : 0
+
   name                         = "${var.env_name}-etl-runner"
   resource_group_name          = var.resource_group_name
   location                     = var.location
