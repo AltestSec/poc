@@ -130,6 +130,46 @@ stages:
           #     TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
           #     TF_VAR_airflow_webserver_secret_key: $(AIRFLOW_WEBSERVER_SECRET_KEY)
           #     TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)
+        # Pre-step: detect & remove stale state lock (Azure Blob backend)
+          - task: AzureCLI@2
+            displayName: 'Pre: Unlock Terraform state if locked'
+            inputs:
+              azureSubscription: 'Azure-ServiceConnection'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+                cd "$(workingDirectory)"
+
+                # Ensure backend is configured (needed for force-unlock)
+                terraform init -input=false -reconfigure \
+                  -backend-config="resource_group_name=$(backendResourceGroup)" \
+                  -backend-config="storage_account_name=$(backendStorageAccount)" \
+                  -backend-config="container_name=$(backendContainer)" \
+                  -backend-config="key=airflow-${{ parameters.environment }}.tfstate"
+
+                # Read blob metadata to see if Terraform lock exists
+                LOCK_ID=$(
+                  az storage blob metadata show \
+                    --account-name "$(backendStorageAccount)" \
+                    --container-name "$(backendContainer)" \
+                    --name "irflow-${{ parameters.environment }}.tfstate" \
+                    --auth-mode login \
+                    --query "metadata.terraformlockid" -o tsv 2>/dev/null || true
+                )
+
+                if [ -n "${LOCK_ID}" ] && [ "${LOCK_ID}" != "null" ]; then
+                  echo "State is locked. terraformlockid=${LOCK_ID}"
+                  echo "Attempting terraform force-unlock..."
+                  terraform force-unlock -force "${LOCK_ID}"
+                  echo "Unlocked."
+                else
+                  echo "No terraform lock metadata found. Continuing."
+                fi
+
+            env:
+              TF_IN_AUTOMATION: "true"
+
           - task: AzureCLI@2
             displayName: Terraform plan
             inputs:
