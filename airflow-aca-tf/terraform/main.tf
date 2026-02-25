@@ -80,7 +80,7 @@ module "storage" {
 module "postgresql" {
   source              = "./modules/postgresql"
   name                = "${local.resource_prefix}-pg"
-  location            = data.azurerm_resource_group.main.location
+  location            = "northeurope" # PostgreSQL in North Europe
   resource_group_name = data.azurerm_resource_group.main.name
   sku_name            = var.postgres_sku_name
   deployment_mode     = var.deployment_mode

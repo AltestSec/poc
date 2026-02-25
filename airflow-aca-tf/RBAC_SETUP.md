@@ -1,6 +1,45 @@
 # RBAC Setup - Manual Role Assignments
 
-После развертывания инфраструктуры через Terraform необходимо вручную назначить роли для managed identities.
+**ВАЖНО:** Role assignments удалены из Terraform, так как Service Principal не имеет прав на создание role assignments (`Microsoft.Authorization/roleAssignments/write`).
+
+Все роли должны быть назначены вручную после развертывания инфраструктуры.
+
+## Быстрый старт (рекомендуется)
+
+Самый простой способ - назначить роль **Contributor** на всю Resource Group для всех managed identities:
+
+```bash
+RESOURCE_GROUP="merzlikin-tf-state-rg"
+SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+RG_SCOPE="/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP"
+
+# Получить Principal IDs после terraform apply
+SCHEDULER_PRINCIPAL_ID=$(az identity show --name airflow-poc-scheduler-mi --resource-group $RESOURCE_GROUP --query principalId -o tsv)
+WORKER_PRINCIPAL_ID=$(az identity show --name airflow-poc-worker-mi --resource-group $RESOURCE_GROUP --query principalId -o tsv)
+WEBSERVER_PRINCIPAL_ID=$(az identity show --name airflow-poc-webserver-mi --resource-group $RESOURCE_GROUP --query principalId -o tsv)
+TRIGGERER_PRINCIPAL_ID=$(az identity show --name airflow-poc-triggerer-mi --resource-group $RESOURCE_GROUP --query principalId -o tsv)
+
+# Назначить Contributor на RG для всех компонентов
+for PRINCIPAL in $SCHEDULER_PRINCIPAL_ID $WORKER_PRINCIPAL_ID $WEBSERVER_PRINCIPAL_ID $TRIGGERER_PRINCIPAL_ID; do
+  echo "Assigning Contributor role to $PRINCIPAL..."
+  az role assignment create \
+    --assignee $PRINCIPAL \
+    --role "Contributor" \
+    --scope $RG_SCOPE
+done
+
+echo "✅ All roles assigned successfully!"
+```
+
+Это даст всем компонентам полные права в пределах Resource Group, включая:
+- ✅ Pull образов из ACR
+- ✅ Запись логов в Storage
+- ✅ Запуск Container App Jobs
+- ✅ Чтение секретов из Key Vault (если настроено RBAC)
+
+## Детальная настройка (опционально)
+
+Если нужны более ограниченные права, назначайте роли по отдельности:
 
 ## Получение необходимых ID
 

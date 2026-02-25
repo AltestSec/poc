@@ -182,6 +182,36 @@ terraform plan \
 terraform apply tfplan
 ```
 
+**Note:** If you get a 403 error about `Microsoft.Authorization/roleAssignments/write`, this is expected. Role assignments have been removed from Terraform and must be assigned manually (see step 4a).
+
+### 4a. Assign RBAC Roles (Required!)
+
+After Terraform completes, assign roles to managed identities:
+
+```bash
+cd ..
+./assign-roles.sh merzlikin-tf-state-rg airflow-poc
+```
+
+Or manually:
+```bash
+RESOURCE_GROUP="merzlikin-tf-state-rg"
+RG_SCOPE="/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP"
+
+# Get Principal IDs
+SCHEDULER_PRINCIPAL_ID=$(az identity show --name airflow-poc-scheduler-mi --resource-group $RESOURCE_GROUP --query principalId -o tsv)
+WORKER_PRINCIPAL_ID=$(az identity show --name airflow-poc-worker-mi --resource-group $RESOURCE_GROUP --query principalId -o tsv)
+WEBSERVER_PRINCIPAL_ID=$(az identity show --name airflow-poc-webserver-mi --resource-group $RESOURCE_GROUP --query principalId -o tsv)
+TRIGGERER_PRINCIPAL_ID=$(az identity show --name airflow-poc-triggerer-mi --resource-group $RESOURCE_GROUP --query principalId -o tsv)
+
+# Assign Contributor role on RG
+for PRINCIPAL in $SCHEDULER_PRINCIPAL_ID $WORKER_PRINCIPAL_ID $WEBSERVER_PRINCIPAL_ID $TRIGGERER_PRINCIPAL_ID; do
+  az role assignment create --assignee $PRINCIPAL --role "Contributor" --scope $RG_SCOPE
+done
+```
+
+See [RBAC_SETUP.md](RBAC_SETUP.md) for detailed instructions.
+
 ### 5. Build and Push Images to ACR
 
 ```bash

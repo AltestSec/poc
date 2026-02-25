@@ -28,18 +28,9 @@ locals {
   ]
 }
 
-# Storage Blob Data Contributor role
-resource "azurerm_role_assignment" "scheduler_blob" {
-  scope                = var.storage_account_id
-  role_definition_name = "Storage Blob Data Contributor"
-  principal_id         = var.scheduler_principal_id
-}
-
-resource "azurerm_role_assignment" "worker_blob" {
-  scope                = var.storage_account_id
-  role_definition_name = "Storage Blob Data Contributor"
-  principal_id         = var.worker_principal_id
-}
+# NOTE: Role assignments removed from Terraform
+# They must be assigned manually after deployment
+# See RBAC_SETUP.md for instructions
 
 # Scheduler Container App
 resource "azurerm_container_app" "scheduler" {
