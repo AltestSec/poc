@@ -35,11 +35,11 @@ variables:
     value: '$(System.DefaultWorkingDirectory)/airflow-aca-tf/terraform'
   - group: ETL-TFSTATE-BACK
   - name: backendResourceGroup
-    value: $[backendResourceGroup]
+    value: $[variables.backendResourceGroup]
   - name: backendStorageAccount
-    value: $[backendStorageAccount]
+    value: $[variables.backendStorageAccount]
   - name: backendContainer
-    value: $[backendContainer]
+    value: $[variables.backendContainer]
 
 stages:
   - stage: Validate
