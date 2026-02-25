@@ -148,7 +148,7 @@ stages:
 
                 terraform plan \
                   -var-file="environments/${{ parameters.environment }}/terraform.tfvars" \
-                  -var="owner=$(ownerEffective)" \
+                  -var="owner=$(ownerIF)" \
                   -out=tfplan \
                   -detailed-exitcode
 
