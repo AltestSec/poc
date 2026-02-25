@@ -186,6 +186,25 @@ stages:
                   -backend-config="container_name=$(backendContainer)" \
                   -backend-config="key=airflow-${{ parameters.environment }}.tfstate"
 
+                # Read blob metadata to see if Terraform lock exists
+                LOCK_ID=$(
+                  az storage blob metadata show \
+                    --account-name "$(backendStorageAccount)" \
+                    --container-name "$(backendContainer)" \
+                    --name "irflow-${{ parameters.environment }}.tfstate" \
+                    --auth-mode login \
+                    --query "metadata.terraformlockid" -o tsv 2>/dev/null || true
+                )
+
+                if [ -n "${LOCK_ID}" ] && [ "${LOCK_ID}" != "null" ]; then
+                  echo "State is locked. terraformlockid=${LOCK_ID}"
+                  echo "Attempting terraform force-unlock..."
+                  terraform force-unlock -force "${LOCK_ID}"
+                  echo "Unlocked."
+                else
+                  echo "No terraform lock metadata found. Continuing."
+                fi
+
                 terraform plan \
                   -var-file="environments/${{ parameters.environment }}/terraform.tfvars" \
                   -var="owner=$(ownerIF)" \
