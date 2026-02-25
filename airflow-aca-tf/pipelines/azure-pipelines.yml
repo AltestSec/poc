@@ -224,15 +224,37 @@ stages:
                     backendAzureRmContainerName: $(backendContainer)
                     backendAzureRmKey: 'airflow-${{ parameters.environment }}.tfstate'
 
-                - task: TerraformTask@5
-                  displayName: 'Terraform Apply'
+                # - task: TerraformTask@5
+                #   displayName: 'Terraform Apply'
+                #   inputs:
+                #     provider: 'azurerm'
+                #     command: 'apply'
+                #     backendServiceArm: 'Azure-ServiceConnection'
+                #     workingDirectory: $(workingDirectory)
+                #     commandOptions: 'tfplan'
+                #     environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+                - task: AzureCLI@2
+                  displayName: 'Terraform apply'
                   inputs:
-                    provider: 'azurerm'
-                    command: 'apply'
-                    backendServiceArm: 'Azure-ServiceConnection'
-                    workingDirectory: $(workingDirectory)
-                    commandOptions: 'tfplan'
-                    environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+                    azureSubscription: 'Azure-ServiceConnection'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      cd "$(workingDirectory)"
+
+                      terraform init -input=false -reconfigure \
+                        -backend-config="resource_group_name=$(backendResourceGroup)" \
+                        -backend-config="storage_account_name=$(backendStorageAccount)" \
+                        -backend-config="container_name=$(backendContainer)" \
+                        -backend-config="key=airflow-${{ parameters.environment }}.tfstate"
+
+                    terraform apply -input=false -auto-approve tfplan
+                  env:
+                    TF_IN_AUTOMATION: "true"
+                    TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
+                    TF_VAR_airflow_webserver_secret_key: $(AIRFLOW_WEBSERVER_SECRET_KEY)
+                    TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)
 
                 #- task: Bash@3
                 - task: AzureCLI@2
@@ -256,7 +278,9 @@ stages:
                       cd $(System.DefaultWorkingDirectory)/airflow-aca/airflow/etl-runner
                       docker build -t $ACR_NAME.azurecr.io/etl-runner:$(Build.BuildId) .
                       docker push $ACR_NAME.azurecr.io/etl-runner:$(Build.BuildId)
-                    workingDirectory: $(workingDirectory)
+                    #workingDirectory: $(workingDirectory)
+
+
 
   - stage: Destroy
     displayName: 'Terraform Destroy'
