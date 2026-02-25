@@ -158,13 +158,15 @@ stages:
                   -var="owner=$(ownerIF)" \
                   -out=tfplan \
                   -detailed-exitcode
+                
+                echo "Exit code: $?"
 
-                    - task: PublishPipelineArtifact@1
-                      displayName: 'Publish Plan'
-                      inputs:
-                        targetPath: '$(workingDirectory)/tfplan'
-                        artifact: 'tfplan-${{ parameters.environment }}'
-                        publishLocation: 'pipeline'
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish Plan'
+            inputs:
+              targetPath: '$(workingDirectory)/tfplan'
+              artifact: 'tfplan-${{ parameters.environment }}'
+              publishLocation: 'pipeline'
             env:
               TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
               TF_VAR_airflow_webserver_secret_key: $(AIRFLOW_WEBSERVER_SECRET_KEY)
