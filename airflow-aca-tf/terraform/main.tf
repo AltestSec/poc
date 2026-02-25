@@ -29,7 +29,7 @@ locals {
   # If prefix is provided, use it; otherwise use env_name
   # This allows: prefix-env_name-resource or just env_name-resource
   resource_prefix = var.prefix != "" ? "${var.prefix}-${var.env_name}" : var.env_name
-  
+
   common_tags = {
     owner       = var.owner
     duedate     = var.duedate
