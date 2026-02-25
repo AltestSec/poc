@@ -54,7 +54,7 @@ stages:
             inputs:
               terraformVersion: 'latest'
 
-          - task: TerraformTaskV4@4
+          - task: TerraformTask@5
             displayName: 'Terraform Init'
             inputs:
               provider: 'azurerm'
@@ -66,14 +66,14 @@ stages:
               backendAzureRmContainerName: $(backendContainer)
               backendAzureRmKey: 'airflow-${{ parameters.environment }}.tfstate'
 
-          - task: TerraformTaskV4@4
+          - task: TerraformTask@5
             displayName: 'Terraform Validate'
             inputs:
               provider: 'azurerm'
               command: 'validate'
               workingDirectory: $(workingDirectory)
 
-          - task: TerraformTaskV4@4
+          - task: TerraformTask@5
             displayName: 'Terraform Format Check'
             inputs:
               provider: 'azurerm'
@@ -92,12 +92,12 @@ stages:
         pool:
           vmImage: 'ubuntu-latest'
         steps:
-          - task: TerraformInstaller@0
+          - task: TerraformInstaller@1
             displayName: 'Install Terraform'
             inputs:
               terraformVersion: $(terraformVersion)
 
-          - task: TerraformTaskV4@4
+          - task: TerraformTask@5
             displayName: 'Terraform Init'
             inputs:
               provider: 'azurerm'
@@ -109,7 +109,7 @@ stages:
               backendAzureRmContainerName: $(backendContainer)
               backendAzureRmKey: 'airflow-${{ parameters.environment }}.tfstate'
 
-          - task: TerraformTaskV4@4
+          - task: TerraformTask@5
             displayName: 'Terraform Plan'
             inputs:
               provider: 'azurerm'
@@ -151,12 +151,12 @@ stages:
                     artifact: 'tfplan-${{ parameters.environment }}'
                     path: $(workingDirectory)
 
-                - task: TerraformInstaller@0
+                - task: TerraformInstaller@1
                   displayName: 'Install Terraform'
                   inputs:
                     terraformVersion: $(terraformVersion)
 
-                - task: TerraformTaskV4@4
+                - task: TerraformTask@5
                   displayName: 'Terraform Init'
                   inputs:
                     provider: 'azurerm'
@@ -168,7 +168,7 @@ stages:
                     backendAzureRmContainerName: $(backendContainer)
                     backendAzureRmKey: 'airflow-${{ parameters.environment }}.tfstate'
 
-                - task: TerraformTaskV4@4
+                - task: TerraformTask@5
                   displayName: 'Terraform Apply'
                   inputs:
                     provider: 'azurerm'
@@ -204,12 +204,12 @@ stages:
         pool:
           vmImage: 'ubuntu-latest'
         steps:
-          - task: TerraformInstaller@0
+          - task: TerraformInstaller@1
             displayName: 'Install Terraform'
             inputs:
               terraformVersion: $(terraformVersion)
 
-          - task: TerraformTaskV4@4
+          - task: TerraformTask@5
             displayName: 'Terraform Init'
             inputs:
               provider: 'azurerm'
@@ -221,7 +221,7 @@ stages:
               backendAzureRmContainerName: $(backendContainer)
               backendAzureRmKey: 'airflow-${{ parameters.environment }}.tfstate'
 
-          - task: TerraformTaskV4@4
+          - task: TerraformTask@5
             displayName: 'Terraform Destroy'
             inputs:
               provider: 'azurerm'
