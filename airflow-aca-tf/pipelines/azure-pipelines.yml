@@ -72,13 +72,16 @@ stages:
 
           - task: TerraformTask@5
             displayName: 'Terraform Validate'
+            continueOnError: false
             inputs:
               provider: 'azurerm'
               command: 'validate'
               workingDirectory: $(workingDirectory)
+              environmentServiceNameAzureRM: 'Azure-ServiceConnection'
 
           - task: TerraformTask@5
             displayName: 'Terraform Format Check'
+            continueOnError: false
             inputs:
               provider: 'azurerm'
               command: 'custom'
@@ -86,6 +89,7 @@ stages:
               commandOptions: '-check -recursive'
               workingDirectory: $(workingDirectory)
               environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+              
 
   - stage: Plan
     displayName: 'Terraform Plan'
