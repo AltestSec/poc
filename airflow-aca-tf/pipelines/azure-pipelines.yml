@@ -34,6 +34,9 @@ variables:
   - name: workingDirectory
     value: '$(System.DefaultWorkingDirectory)/airflow-aca-tf/terraform'
   - group: ETL-TFSTATE-BACK
+  - group: tags
+  - name: ownerIF
+    value: $[ coalesce(variables['owner'], '${{ parameters.owner }}') ]
   # - name: backendResourceGroup
   #   value: $[variables.backendResourceGroup]
   # - name: backendStorageAccount
@@ -116,7 +119,7 @@ stages:
               provider: 'azurerm'
               command: 'plan'
               workingDirectory: $(workingDirectory)
-              commandOptions: '-var-file=environments/${{ parameters.environment }}/terraform.tfvars -var="owner=${{ parameters.owner }}" -out=tfplan'
+              commandOptions: '-var-file=environments/${{ parameters.environment }}/terraform.tfvars -var="owner=$(ownerIF)" -out=tfplan'
               environmentServiceNameAzureRM: 'Azure-ServiceConnection'
             env:
               TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
@@ -228,7 +231,7 @@ stages:
               provider: 'azurerm'
               command: 'destroy'
               workingDirectory: $(workingDirectory)
-              commandOptions: '-var-file=environments/${{ parameters.environment }}/terraform.tfvars -var="owner=${{ parameters.owner }}"'
+              commandOptions: '-var-file=environments/${{ parameters.environment }}/terraform.tfvars -var="owner=$(ownerIF)"'
               environmentServiceNameAzureRM: 'Azure-ServiceConnection'
             env:
               TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
