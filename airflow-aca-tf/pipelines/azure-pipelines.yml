@@ -152,18 +152,30 @@ stages:
                   -backend-config="container_name=$(backendContainer)" \
                   -backend-config="key=airflow-${{ parameters.environment }}.tfstate"
 
+                set +e
                 terraform plan \
-                  -input=false -lock-timeout=30s -detailed-exitcode \
+                  -input=false \
+                  -lock-timeout=30s \
+                  -detailed-exitcode \
                   -var-file="environments/${{ parameters.environment }}/terraform.tfvars" \
                   -var="owner=$(ownerIF)" \
-                  -out=tfplan \
-                  -detailed-exitcode
-                  
-                echo "Exit code: $?"
+                  -out=tfplan
+                EC=$?
+                set -e
+
+                if [ $EC -eq 0 ]; then
+                  echo "Plan: no changes."
+                elif [ $EC -eq 2 ]; then
+                  echo "Plan: changes present."
+                  exit 0
+                else
+                  echo "Plan failed with exit code $EC"
+                  exit $EC
+                fi
             env:
               TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
               TF_VAR_airflow_webserver_secret_key: $(AIRFLOW_WEBSERVER_SECRET_KEY)
-              TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)    
+              TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)   
                 
 
           - task: PublishPipelineArtifact@1
