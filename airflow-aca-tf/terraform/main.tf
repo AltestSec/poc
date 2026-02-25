@@ -32,25 +32,23 @@ locals {
   }
 }
 
-resource "azurerm_resource_group" "main" {
-  name     = var.resource_group_name
-  location = var.location
-  tags     = local.common_tags
+data "azurerm_resource_group" "main" {
+  name = var.resource_group_name
 }
 
 module "log_analytics" {
   source              = "./modules/log_analytics"
   name                = "${var.env_name}-logs"
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = data.azurerm_resource_group.main.location
+  resource_group_name = data.azurerm_resource_group.main.name
   tags                = local.common_tags
 }
 
 module "key_vault" {
   source              = "./modules/key_vault"
   name                = "${var.env_name}-kv"
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = data.azurerm_resource_group.main.location
+  resource_group_name = data.azurerm_resource_group.main.name
   tenant_id           = data.azurerm_client_config.current.tenant_id
   tags                = local.common_tags
 }
@@ -58,8 +56,8 @@ module "key_vault" {
 module "acr" {
   source              = "./modules/acr"
   name                = replace("${var.env_name}acr", "-", "")
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = data.azurerm_resource_group.main.location
+  resource_group_name = data.azurerm_resource_group.main.name
   sku                 = var.acr_sku
   tags                = local.common_tags
 }
@@ -67,16 +65,16 @@ module "acr" {
 module "storage" {
   source              = "./modules/storage"
   name                = replace("${var.env_name}stor", "-", "")
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = data.azurerm_resource_group.main.location
+  resource_group_name = data.azurerm_resource_group.main.name
   tags                = local.common_tags
 }
 
 module "postgresql" {
   source              = "./modules/postgresql"
   name                = "${var.env_name}-pg"
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = data.azurerm_resource_group.main.location
+  resource_group_name = data.azurerm_resource_group.main.name
   sku_name            = var.postgres_sku_name
   deployment_mode     = var.deployment_mode
   admin_password      = var.postgres_admin_password
@@ -86,8 +84,8 @@ module "postgresql" {
 module "redis" {
   source              = "./modules/redis"
   name                = "${var.env_name}-redis"
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = data.azurerm_resource_group.main.location
+  resource_group_name = data.azurerm_resource_group.main.name
   sku_name            = var.redis_sku_name
   family              = var.redis_family
   capacity            = var.redis_capacity
@@ -97,16 +95,16 @@ module "redis" {
 module "managed_identity" {
   source              = "./modules/managed_identity"
   env_name            = var.env_name
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = data.azurerm_resource_group.main.location
+  resource_group_name = data.azurerm_resource_group.main.name
   tags                = local.common_tags
 }
 
 module "aca_environment" {
   source                      = "./modules/aca_environment"
   name                        = "${var.env_name}-env"
-  location                    = azurerm_resource_group.main.location
-  resource_group_name         = azurerm_resource_group.main.name
+  location                    = data.azurerm_resource_group.main.location
+  resource_group_name         = data.azurerm_resource_group.main.name
   log_analytics_workspace_id  = module.log_analytics.workspace_id
   log_analytics_workspace_key = module.log_analytics.primary_shared_key
   storage_account_name        = module.storage.storage_account_name
@@ -118,8 +116,8 @@ module "aca_environment" {
 module "container_apps" {
   source                       = "./modules/container_apps"
   env_name                     = var.env_name
-  location                     = azurerm_resource_group.main.location
-  resource_group_name          = azurerm_resource_group.main.name
+  location                     = data.azurerm_resource_group.main.location
+  resource_group_name          = data.azurerm_resource_group.main.name
   aca_environment_id           = module.aca_environment.environment_id
   aca_storage_name             = module.aca_environment.storage_name
   acr_login_server             = module.acr.login_server
