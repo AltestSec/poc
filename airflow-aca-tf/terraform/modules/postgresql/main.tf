@@ -2,7 +2,7 @@ resource "azurerm_postgresql_flexible_server" "postgres" {
   name                = "${var.name}-pg-server"
   resource_group_name = var.resource_group_name
   location            = var.location
-  version             = "17"
+  version             = "16"
 
   administrator_login    = "airflow"
   administrator_password = var.admin_password
@@ -12,7 +12,9 @@ resource "azurerm_postgresql_flexible_server" "postgres" {
 
   backup_retention_days        = 7
   geo_redundant_backup_enabled = false
-
+  lifecycle {
+    ignore_changes = [zone]
+  }
 #  dynamic "high_availability" {
 #    for_each = var.deployment_mode == "production" ? [1] : []
 #    content {
