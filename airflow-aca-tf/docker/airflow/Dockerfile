@@ -29,11 +29,4 @@ COPY --chown=airflow:root plugins/ /opt/airflow/plugins/
 # Copy webserver_config for RBAC/auth customization
 COPY --chown=airflow:root config/webserver_config.py /opt/airflow/webserver_config.py
 
-# Copy entrypoint script
-COPY --chown=airflow:root scripts/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
 EXPOSE 8080
-
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["scheduler"]

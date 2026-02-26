@@ -29,10 +29,6 @@ parameters:
     displayName: 'Build and Push Docker Images'
     type: boolean
     default: false
-  # - name: owner
-  #   displayName: 'Owner Email'
-  #   type: string
-  #   default: 'user@gmail.com'
 
 variables:
   - name: terraformVersion
@@ -232,15 +228,6 @@ stages:
                     backendAzureRmContainerName: $(backendContainer)
                     backendAzureRmKey: 'airflow-${{ parameters.environment }}.tfstate'
 
-                # - task: TerraformTask@5
-                #   displayName: 'Terraform Apply'
-                #   inputs:
-                #     provider: 'azurerm'
-                #     command: 'apply'
-                #     backendServiceArm: 'Azure-ServiceConnection'
-                #     workingDirectory: $(workingDirectory)
-                #     commandOptions: 'tfplan'
-                #     environmentServiceNameAzureRM: 'Azure-ServiceConnection'
                 - task: AzureCLI@2
                   displayName: 'Terraform apply'
                   inputs:

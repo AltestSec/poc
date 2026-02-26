@@ -8,6 +8,8 @@ Airflow requires the PostgreSQL database to be initialized with the Airflow sche
 
 The Airflow Docker image includes an entrypoint script that automatically handles database initialization when the scheduler starts.
 
+**This is the preferred method** - no manual intervention needed!
+
 ### What it does:
 
 1. **Checks database connection** - Waits up to 60 seconds for PostgreSQL to be ready
@@ -19,18 +21,45 @@ The Airflow Docker image includes an entrypoint script that automatically handle
    - Email: `admin@example.com`
    - Role: Admin
 
-### How it works:
+### How to verify it's working:
 
-The scheduler container uses a custom entrypoint script (`/entrypoint.sh`) that:
-- Only runs initialization on the scheduler (not on webserver, worker, or triggerer)
-- Is idempotent (safe to run multiple times)
-- Handles database connection retries
+```bash
+# Check scheduler logs
+az containerapp logs show \
+  --name airflow-poc-scheduler \
+  --resource-group merzlikin-tf-state-rg \
+  --tail 100 --follow
+```
+
+Look for these messages:
+- ✅ "Checking database connection..."
+- ✅ "Database is ready"
+- ✅ "Starting scheduler..."
+
+If you see errors, continue to manual initialization below.
 
 ## Manual Initialization (If Needed)
 
 If automatic initialization fails or you need to manually initialize:
 
-### Option 1: Via Container Exec
+### Option 1: Check Logs First (Recommended)
+
+Before attempting manual initialization, check if it's already happening automatically:
+
+```bash
+# Run the deployment check script
+./scripts/check-deployment.sh
+
+# Or manually check logs
+az containerapp logs show \
+  --name airflow-poc-scheduler \
+  --resource-group merzlikin-tf-state-rg \
+  --tail 100 --follow
+```
+
+### Option 2: Via Container Exec (May Not Work)
+
+**Note:** `az containerapp exec` often fails with WebSocket errors. If this doesn't work, use Option 3.
 
 ```bash
 # Execute db init command in scheduler container
@@ -40,7 +69,11 @@ az containerapp exec \
   --command "airflow db init"
 ```
 
-### Option 2: Via Temporary Job
+If you get error: `ClusterExecEndpointWebSocketConnectionError`, this is a known Azure limitation. Use Option 3 instead.
+
+### Option 3: Via Temporary Container App Job (Most Reliable)
+
+This creates a one-time job that runs `airflow db init` and then cleans up:
 
 ```bash
 # Set variables
@@ -48,51 +81,83 @@ RG_NAME="merzlikin-tf-state-rg"
 ENV_NAME="airflow-poc"
 ACR_NAME="merzlikinairflowpocacr"
 
-# Get environment ID
-ENV_ID=$(az containerapp env list \
+# Get Container Apps Environment name
+ACA_ENV_NAME=$(az containerapp env list \
   --resource-group $RG_NAME \
-  --query "[?contains(name, '${ENV_NAME}')].id" -o tsv)
+  --query "[?contains(name, '${ENV_NAME}')].name" -o tsv)
 
-# Get database connection string from scheduler
-DB_CONN=$(az containerapp show \
+# Get all environment variables from scheduler (for database connection)
+SCHEDULER_ENV=$(az containerapp show \
   --name ${ENV_NAME}-scheduler \
   --resource-group $RG_NAME \
-  --query "properties.template.containers[0].env[?name=='AIRFLOW__DATABASE__SQL_ALCHEMY_CONN'].value" -o tsv)
+  --query "properties.template.containers[0].env" -o json)
 
-# Create one-time init job
+# Create temporary init job
 az containerapp job create \
   --name ${ENV_NAME}-db-init-temp \
   --resource-group $RG_NAME \
-  --environment $ENV_ID \
+  --environment $ACA_ENV_NAME \
   --trigger-type Manual \
-  --replica-timeout 300 \
+  --replica-timeout 600 \
   --replica-retry-limit 1 \
   --image ${ACR_NAME}.azurecr.io/airflow:latest \
   --cpu 0.5 \
   --memory 1Gi \
-  --command "airflow" "db" "init" \
-  --env-vars "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=$DB_CONN" \
+  --command "/bin/bash" "-c" "airflow db init && airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin || true" \
   --registry-server ${ACR_NAME}.azurecr.io
 
+# Copy environment variables from scheduler to job
+echo "$SCHEDULER_ENV" | jq -r '.[] | "--set-env-vars \(.name)=\(.value // .secretRef)"' | while read -r env_var; do
+  az containerapp job update \
+    --name ${ENV_NAME}-db-init-temp \
+    --resource-group $RG_NAME \
+    $env_var 2>/dev/null || true
+done
+
 # Start the job
+echo "Starting database initialization job..."
 az containerapp job start \
   --name ${ENV_NAME}-db-init-temp \
   --resource-group $RG_NAME
 
-# Wait for completion (check status)
+# Wait and check status
+echo "Waiting for job to complete (this may take 1-2 minutes)..."
+sleep 30
+
+# Check execution status
 az containerapp job execution list \
   --name ${ENV_NAME}-db-init-temp \
   --resource-group $RG_NAME \
+  --query "[0].{Name:name, Status:properties.status, StartTime:properties.startTime}" \
   -o table
 
+# Get job logs
+echo ""
+echo "Job logs:"
+EXECUTION_NAME=$(az containerapp job execution list \
+  --name ${ENV_NAME}-db-init-temp \
+  --resource-group $RG_NAME \
+  --query "[0].name" -o tsv)
+
+if [ -n "$EXECUTION_NAME" ]; then
+  az containerapp job logs show \
+    --name ${ENV_NAME}-db-init-temp \
+    --resource-group $RG_NAME \
+    --execution $EXECUTION_NAME || echo "Logs not available yet"
+fi
+
 # Clean up
+echo ""
+echo "Cleaning up temporary job..."
 az containerapp job delete \
   --name ${ENV_NAME}-db-init-temp \
   --resource-group $RG_NAME \
   --yes
+
+echo "✅ Database initialization completed"
 ```
 
-### Option 3: Via Local Connection
+### Option 4: Via Local Connection (If PostgreSQL is Accessible)
 
 If you have network access to PostgreSQL:
 
@@ -135,6 +200,22 @@ az containerapp exec \
 ```
 
 ## Troubleshooting
+
+### Error: "ClusterExecEndpointWebSocketConnectionError"
+
+**Cause:** `az containerapp exec` command cannot establish WebSocket connection. This is a known limitation of Azure Container Apps.
+
+**Solution:**
+1. **Don't use `exec`** - It's unreliable for Container Apps
+2. **Check logs instead**:
+   ```bash
+   az containerapp logs show \
+     --name airflow-poc-scheduler \
+     --resource-group merzlikin-tf-state-rg \
+     --tail 100 --follow
+   ```
+3. **Use temporary job** for manual initialization (see Option 3 above)
+4. **Let automatic initialization work** - The entrypoint script handles it
 
 ### Error: "You need to initialize the database"
 
