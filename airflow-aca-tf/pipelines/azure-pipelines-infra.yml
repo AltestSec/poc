@@ -55,12 +55,18 @@ stages:
           
           - template: templates/tf-init.yml
             parameters:
-              serviceConnection: $(serviceConnection)
+              # serviceConnection: $(serviceConnection)
+              # workingDirectory: $(workingDirectory)
+              # backendResourceGroup: $(backendResourceGroup)
+              # backendStorageAccount: $(backendStorageAccount)
+              # backendContainer: $(backendContainer)
+              # backendKey: $(backendKey)
               workingDirectory: $(workingDirectory)
-              backendResourceGroup: $(backendResourceGroup)
-              backendStorageAccount: $(backendStorageAccount)
-              backendContainer: $(backendContainer)
-              backendKey: $(backendKey)
+              backendServiceArm: 'Azure-ServiceConnection'
+              backendAzureRmResourceGroupName: $(backendResourceGroup)
+              backendAzureRmStorageAccountName: $(backendStorageAccount)
+              backendAzureRmContainerName: $(backendContainer)
+              backendAzureRmKey: 'airflow-${{ parameters.environment }}.tfstate'
           
           - template: templates/tf-fmt-validate.yml
             parameters:
