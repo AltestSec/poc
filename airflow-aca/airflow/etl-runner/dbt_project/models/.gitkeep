@@ -1,0 +1,9 @@
+# Place your DBT models here
+# Example structure:
+# models/
+#   staging/
+#     stg_customers.sql
+#     stg_orders.sql
+#   marts/
+#     dim_customers.sql
+#     fct_orders.sql

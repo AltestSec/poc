@@ -6,12 +6,15 @@ deployment_mode     = "poc"
 # Prefix for globally unique resource names (ACR, Storage, Key Vault)
 prefix = "merzlikin"
 
-# Disable ETL job until you have your own image
-enable_etl_job = false
+# Enable ETL job (your custom DBT runner)
+# Set to false until images are built and pushed to ACR
+enable_etl_job = true
 
-airflow_image = "apache/airflow:2.9.3"
-# ETL runner image (only used if enable_etl_job = true)
-etl_runner_image = "mcr.microsoft.com/k8se/quickstart-jobs:latest"
+# Use images from your ACR (built by pipeline or locally)
+# Format: <acr-name>.azurecr.io/<image>:<tag>
+# Note: Build and push images first before enabling ETL job
+airflow_image    = "merzlikinairflowpocacr.azurecr.io/airflow:latest"
+etl_runner_image = "merzlikinairflowpocacr.azurecr.io/etl-runner:latest"
 
 postgres_sku_name = "B_Standard_B1ms"
 redis_sku_name    = "Standard"

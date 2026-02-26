@@ -9,6 +9,11 @@ output "acr_admin_username" {
   sensitive   = true
 }
 
+output "resource_group_name" {
+  description = "Resource group name"
+  value       = data.azurerm_resource_group.main.name
+}
+
 output "aca_environment_id" {
   description = "ACA Environment ID"
   value       = module.aca_environment.environment_id

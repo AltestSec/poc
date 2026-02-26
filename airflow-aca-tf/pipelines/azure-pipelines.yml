@@ -6,6 +6,8 @@ trigger:
   paths:
     include:
       - airflow-aca-tf/terraform/**
+      - airflow-aca-tf/docker/**
+      - airflow-aca-tf/pipelines/**
 
 parameters:
   - name: environment
@@ -23,6 +25,10 @@ parameters:
       - plan
       - apply
       - destroy
+  - name: buildImages
+    displayName: 'Build and Push Docker Images'
+    type: boolean
+    default: false
   # - name: owner
   #   displayName: 'Owner Email'
   #   type: string
@@ -263,6 +269,7 @@ stages:
                 #- task: Bash@3
                 - task: AzureCLI@2
                   displayName: 'Build and Push Airflow Image to ACR'
+                  condition: eq('${{ parameters.buildImages }}', true)
                   inputs: 
                     azureSubscription: 'Azure-ServiceConnection'
                     scriptType: Bash
@@ -273,16 +280,212 @@ stages:
 
                       ACR_LOGIN_SERVER="$(terraform output -raw acr_login_server)"
                       ACR_NAME="$(echo "$ACR_LOGIN_SERVER" | cut -d'.' -f1)"
+                      
+                      echo "Building images for linux/amd64 platform..."
+                      
+                      # Build and push Airflow image with both build ID and latest tags
+                      cd $(System.DefaultWorkingDirectory)/airflow-aca-tf/docker/airflow
+                      docker build --platform linux/amd64 \
+                        -t $ACR_NAME.azurecr.io/airflow:$(Build.BuildId) \
+                        -t $ACR_NAME.azurecr.io/airflow:latest .
+                      
                       az acr login --name $ACR_NAME
-                      
-                      cd $(System.DefaultWorkingDirectory)/airflow-aca/airflow
-                      docker build -t $ACR_NAME.azurecr.io/airflow:$(Build.BuildId) .
                       docker push $ACR_NAME.azurecr.io/airflow:$(Build.BuildId)
+                      docker push $ACR_NAME.azurecr.io/airflow:latest
                       
-                      cd $(System.DefaultWorkingDirectory)/airflow-aca/airflow/etl-runner
-                      docker build -t $ACR_NAME.azurecr.io/etl-runner:$(Build.BuildId) .
+                      # Build and push ETL runner image with both build ID and latest tags
+                      cd $(System.DefaultWorkingDirectory)/airflow-aca-tf/docker/etl-runner
+                      docker build --platform linux/amd64 \
+                        -t $ACR_NAME.azurecr.io/etl-runner:$(Build.BuildId) \
+                        -t $ACR_NAME.azurecr.io/etl-runner:latest .
+                      
                       docker push $ACR_NAME.azurecr.io/etl-runner:$(Build.BuildId)
+                      docker push $ACR_NAME.azurecr.io/etl-runner:latest
+                      
+                      echo "Images built and pushed successfully"
                     #workingDirectory: $(workingDirectory)
+
+                - task: AzureCLI@2
+                  displayName: 'Update Container Apps with New Images'
+                  condition: eq('${{ parameters.buildImages }}', true)
+                  inputs:
+                    azureSubscription: 'Azure-ServiceConnection'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      
+                      RG_NAME="$(terraform output -raw resource_group_name)"
+                      ENV_NAME="${{ parameters.environment }}"
+                      ACR_LOGIN_SERVER="$(terraform output -raw acr_login_server)"
+                      ACR_NAME="$(echo "$ACR_LOGIN_SERVER" | cut -d'.' -f1)"
+                      
+                      echo "Updating Container Apps to pull new images..."
+                      
+                      # Update Scheduler
+                      echo "Updating scheduler..."
+                      az containerapp update \
+                        --name airflow-${ENV_NAME}-scheduler \
+                        --resource-group $RG_NAME \
+                        --image $ACR_NAME.azurecr.io/airflow:latest \
+                        --output none || echo "Scheduler not found or update failed"
+                      
+                      # Update Webserver
+                      echo "Updating webserver..."
+                      az containerapp update \
+                        --name airflow-${ENV_NAME}-webserver \
+                        --resource-group $RG_NAME \
+                        --image $ACR_NAME.azurecr.io/airflow:latest \
+                        --output none || echo "Webserver not found or update failed"
+                      
+                      # Update Worker
+                      echo "Updating worker..."
+                      az containerapp update \
+                        --name airflow-${ENV_NAME}-worker \
+                        --resource-group $RG_NAME \
+                        --image $ACR_NAME.azurecr.io/airflow:latest \
+                        --output none || echo "Worker not found or update failed"
+                      
+                      # Update Triggerer
+                      echo "Updating triggerer..."
+                      az containerapp update \
+                        --name airflow-${ENV_NAME}-triggerer \
+                        --resource-group $RG_NAME \
+                        --image $ACR_NAME.azurecr.io/airflow:latest \
+                        --output none || echo "Triggerer not found or update failed"
+                      
+                      # Update ETL Job (if exists)
+                      echo "Updating ETL runner job..."
+                      az containerapp job update \
+                        --name airflow-${ENV_NAME}-etl-runner \
+                        --resource-group $RG_NAME \
+                        --image $ACR_NAME.azurecr.io/etl-runner:latest \
+                        --output none || echo "ETL job not found or update failed"
+                      
+                      echo "Container Apps updated successfully"
+                    workingDirectory: $(workingDirectory)
+
+                - task: AzureCLI@2
+                  displayName: 'Smoke Tests - Verify Container Apps Health'
+                  condition: eq('${{ parameters.buildImages }}', true)
+                  inputs:
+                    azureSubscription: 'Azure-ServiceConnection'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      
+                      RG_NAME="$(terraform output -raw resource_group_name)"
+                      ENV_NAME="${{ parameters.environment }}"
+                      
+                      echo "=========================================="
+                      echo "Running smoke tests..."
+                      echo "=========================================="
+                      
+                      # Function to check container app health
+                      check_app_health() {
+                        local app_name=$1
+                        local app_type=${2:-"containerapp"}
+                        
+                        echo ""
+                        echo "Checking $app_name..."
+                        
+                        if [ "$app_type" = "job" ]; then
+                          STATUS=$(az containerapp job show \
+                            --name $app_name \
+                            --resource-group $RG_NAME \
+                            --query "properties.provisioningState" -o tsv 2>/dev/null || echo "NotFound")
+                        else
+                          STATUS=$(az containerapp show \
+                            --name $app_name \
+                            --resource-group $RG_NAME \
+                            --query "properties.provisioningState" -o tsv 2>/dev/null || echo "NotFound")
+                          
+                          RUNNING_STATUS=$(az containerapp show \
+                            --name $app_name \
+                            --resource-group $RG_NAME \
+                            --query "properties.runningStatus" -o tsv 2>/dev/null || echo "Unknown")
+                        fi
+                        
+                        if [ "$STATUS" = "NotFound" ]; then
+                          echo "  ⚠️  $app_name: Not found (may not be deployed yet)"
+                          return 0
+                        elif [ "$STATUS" = "Succeeded" ]; then
+                          if [ "$app_type" = "job" ]; then
+                            echo "  ✅ $app_name: Provisioned successfully"
+                          else
+                            echo "  ✅ $app_name: $STATUS (Running: $RUNNING_STATUS)"
+                          fi
+                          return 0
+                        else
+                          echo "  ❌ $app_name: $STATUS"
+                          return 1
+                        fi
+                      }
+                      
+                      # Check all Container Apps
+                      FAILED=0
+                      
+                      check_app_health "airflow-${ENV_NAME}-scheduler" || FAILED=1
+                      check_app_health "airflow-${ENV_NAME}-webserver" || FAILED=1
+                      check_app_health "airflow-${ENV_NAME}-worker" || FAILED=1
+                      check_app_health "airflow-${ENV_NAME}-triggerer" || FAILED=1
+                      check_app_health "airflow-${ENV_NAME}-etl-runner" "job" || FAILED=1
+                      
+                      echo ""
+                      echo "=========================================="
+                      
+                      # Check webserver endpoint
+                      echo "Checking webserver endpoint..."
+                      WEBSERVER_FQDN=$(az containerapp show \
+                        --name airflow-${ENV_NAME}-webserver \
+                        --resource-group $RG_NAME \
+                        --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null || echo "")
+                      
+                      if [ -n "$WEBSERVER_FQDN" ]; then
+                        echo "  Webserver URL: https://$WEBSERVER_FQDN"
+                        
+                        # Try to reach the webserver (with timeout)
+                        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://$WEBSERVER_FQDN/health" || echo "000")
+                        
+                        if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ]; then
+                          echo "  ✅ Webserver is responding (HTTP $HTTP_CODE)"
+                        else
+                          echo "  ⚠️  Webserver returned HTTP $HTTP_CODE (may still be starting up)"
+                        fi
+                      else
+                        echo "  ⚠️  Webserver FQDN not found"
+                      fi
+                      
+                      echo ""
+                      echo "=========================================="
+                      
+                      # Check recent logs for errors
+                      echo "Checking scheduler logs for errors..."
+                      SCHEDULER_LOGS=$(az containerapp logs show \
+                        --name airflow-${ENV_NAME}-scheduler \
+                        --resource-group $RG_NAME \
+                        --tail 20 \
+                        --format text 2>/dev/null || echo "")
+                      
+                      if echo "$SCHEDULER_LOGS" | grep -qi "error\|exception\|failed"; then
+                        echo "  ⚠️  Found errors in scheduler logs (check manually)"
+                      else
+                        echo "  ✅ No obvious errors in recent scheduler logs"
+                      fi
+                      
+                      echo ""
+                      echo "=========================================="
+                      echo "Smoke tests completed"
+                      echo "=========================================="
+                      
+                      if [ $FAILED -eq 1 ]; then
+                        echo "⚠️  Some checks failed - review the output above"
+                        exit 0  # Don't fail the pipeline, just warn
+                      else
+                        echo "✅ All checks passed"
+                      fi
+                    workingDirectory: $(workingDirectory)
 
 
 

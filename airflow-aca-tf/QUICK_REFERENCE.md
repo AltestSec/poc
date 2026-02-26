@@ -49,18 +49,22 @@ terraform output -raw acr_login_server
 ### ACR Commands
 
 ```bash
-# Login to ACR
-az acr login --name <acr-name>
+# Login to ACR (using prefix + env_name)
+az acr login --name merzlikinairflowpocacr
 
 # List images
-az acr repository list --name <acr-name>
+az acr repository list --name merzlikinairflowpocacr
 
-# List tags
-az acr repository show-tags --name <acr-name> --repository airflow
+# List tags for airflow image
+az acr repository show-tags --name merzlikinairflowpocacr --repository airflow
 
-# Build and push
-docker build -t <acr-name>.azurecr.io/airflow:latest .
-docker push <acr-name>.azurecr.io/airflow:latest
+# List tags for etl-runner image
+az acr repository show-tags --name merzlikinairflowpocacr --repository etl-runner
+
+# Build and push (done automatically by pipeline)
+# Pipeline pushes both build-specific tag and 'latest' tag
+docker build -t merzlikinairflowpocacr.azurecr.io/airflow:latest .
+docker push merzlikinairflowpocacr.azurecr.io/airflow:latest
 ```
 
 ### Storage Commands
@@ -211,18 +215,23 @@ openssl rand -base64 32
 
 ## Resource Naming Convention
 
+Resources use prefix for globally unique names (ACR, Storage, Key Vault):
+
 | Resource Type | Naming Pattern | Example |
 |---|---|---|
-| Resource Group | `{env_name}-rg` | `airflow-poc-rg` |
-| ACR | `{env_name}acr` | `airflowpocacr` |
-| Storage Account | `{env_name}stor` | `airflowpocstor` |
-| PostgreSQL | `{env_name}-pg` | `airflow-poc-pg` |
-| Redis | `{env_name}-redis` | `airflow-poc-redis` |
-| Key Vault | `{env_name}-kv` | `airflow-poc-kv` |
-| Log Analytics | `{env_name}-logs` | `airflow-poc-logs` |
+| Resource Group | Pre-existing | `merzlikin-tf-state-rg` |
+| ACR | `{prefix}{env_name}acr` | `merzlikinairflowpocacr` |
+| Storage Account | `{prefix}{env_name}stor` | `merzlikinairflowpocstor` |
+| Key Vault | `{prefix}-{env_name}-kv` | `merzlikin-airflow-poc-kv` |
+| PostgreSQL | `{prefix}-{env_name}-pg` | `merzlikin-airflow-poc-pg` |
+| Redis | `{prefix}-{env_name}-redis` | `merzlikin-airflow-poc-redis` |
+| Log Analytics | `{prefix}-{env_name}-logs` | `merzlikin-airflow-poc-logs` |
 | ACA Environment | `{env_name}-env` | `airflow-poc-env` |
 | Container App | `{env_name}-{component}` | `airflow-poc-scheduler` |
 | Managed Identity | `{env_name}-{component}-mi` | `airflow-poc-worker-mi` |
+| Container App Job | `{env_name}-etl-runner` | `airflow-poc-etl-runner` |
+
+Note: `prefix = "merzlikin"` and `env_name = "airflow-poc"` for PoC environment
 
 ## Default Tags
 
@@ -230,11 +239,33 @@ All resources are tagged with:
 
 ```hcl
 tags = {
-  owner       = "user@gmail.com"  # Configurable via parameter
-  duedate     = "6march"          # Configurable via variable
+  owner       = "user@gmail.com"  # From Build.RequestedForEmail
+  duedate     = "6march"          # From pipeline variable group
   managedwith = "terraform"       # Fixed
 }
 ```
+
+## Docker Images
+
+The pipeline builds and pushes two custom Docker images to ACR:
+
+1. **Airflow Image** (`airflow:latest` and `airflow:<build-id>`)
+   - Base: `apache/airflow:2.9.3`
+   - Includes: Azure provider, DBT, Managed Identity support
+   - Source: `airflow-aca/airflow/Dockerfile`
+
+2. **ETL Runner Image** (`etl-runner:latest` and `etl-runner:<build-id>`)
+   - Base: `python:3.11-slim`
+   - Includes: DBT, Azure Identity, Key Vault integration
+   - Source: `airflow-aca/airflow/etl-runner/Dockerfile`
+   - Runs as Container App Job triggered by Airflow Worker
+
+Pipeline workflow:
+1. Terraform creates ACR and other infrastructure
+2. Pipeline builds both images with two tags: `<Build.BuildId>` and `latest`
+3. Images are pushed to ACR
+4. Container Apps pull `latest` tag (configured in tfvars)
+5. Managed Identities must have `AcrPull` role assigned (see RBAC_COMMANDS.md)
 
 ## Resource Sizing
 
