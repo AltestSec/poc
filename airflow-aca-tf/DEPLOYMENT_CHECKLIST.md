@@ -178,20 +178,39 @@ See `RBAC_COMMANDS.md` for detailed instructions.
 az containerapp list --resource-group merzlikin-tf-state-rg -o table
 ```
 
+- [ ] Check scheduler logs for database initialization:
+```bash
+az containerapp logs show \
+  --name airflow-poc-scheduler \
+  --resource-group merzlikin-tf-state-rg \
+  --tail 100 --follow
+```
+
+Look for messages like:
+- "Checking database connection..."
+- "Database is ready"
+- "Starting scheduler..."
+
+If you see "You need to initialize the database", see `DATABASE_INIT.md` for troubleshooting.
+
 - [ ] Get webserver URL:
 ```bash
 terraform output -raw webserver_fqdn
 ```
 
 - [ ] Access Airflow UI at `https://<webserver-fqdn>`
-- [ ] Default credentials: admin/admin (change immediately)
+- [ ] Login with default credentials: admin/admin (⚠️ CHANGE IMMEDIATELY)
 
-- [ ] Check logs:
+- [ ] Check all components are running:
 ```bash
-az containerapp logs show \
-  --name airflow-poc-scheduler \
-  --resource-group merzlikin-tf-state-rg \
-  --tail 50
+# Check all container apps
+for app in scheduler webserver worker triggerer; do
+  echo "=== $app ==="
+  az containerapp show \
+    --name airflow-poc-$app \
+    --resource-group merzlikin-tf-state-rg \
+    --query "properties.runningStatus" -o tsv
+done
 ```
 
 ## Step 7: Post-Deployment Configuration
@@ -214,6 +233,13 @@ az storage file upload-batch \
 - Check RBAC roles are assigned (especially AcrPull)
 - Verify images exist in ACR
 - Check logs for errors
+- If scheduler shows "You need to initialize the database", see `DATABASE_INIT.md`
+
+### Database initialization errors
+- Scheduler automatically initializes database on first start
+- Check scheduler logs: `az containerapp logs show --name airflow-poc-scheduler --resource-group merzlikin-tf-state-rg --tail 100`
+- Verify PostgreSQL is running and accessible
+- See `DATABASE_INIT.md` for manual initialization steps
 
 ### Image pull errors
 - Ensure Managed Identities have AcrPull role
@@ -222,6 +248,7 @@ az storage file upload-batch \
 ### Database connection errors
 - Check PostgreSQL firewall rules
 - Verify connection string in Container App environment variables
+- Test connection: `az containerapp exec --name airflow-poc-scheduler --resource-group merzlikin-tf-state-rg --command "airflow db check"`
 
 ### ETL Job not found
 - Set `enable_etl_job = true` in tfvars

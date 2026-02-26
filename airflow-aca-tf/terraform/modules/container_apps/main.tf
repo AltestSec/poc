@@ -58,7 +58,7 @@ resource "azurerm_container_app" "scheduler" {
       image   = var.airflow_image
       cpu     = local.scheduler_cpu
       memory  = local.scheduler_mem
-      command = ["airflow", "scheduler"]
+      command = ["scheduler"]
 
       dynamic "env" {
         for_each = local.common_env
@@ -116,7 +116,7 @@ resource "azurerm_container_app" "triggerer" {
       image   = var.airflow_image
       cpu     = 0.25
       memory  = "0.5Gi"
-      command = ["airflow", "triggerer"]
+      command = ["triggerer"]
 
       dynamic "env" {
         for_each = local.common_env
@@ -179,7 +179,7 @@ resource "azurerm_container_app" "webserver" {
       image   = var.airflow_image
       cpu     = local.webserver_cpu
       memory  = local.webserver_mem
-      command = ["airflow", "webserver"]
+      command = ["webserver"]
 
       dynamic "env" {
         for_each = local.common_env
@@ -237,7 +237,7 @@ resource "azurerm_container_app" "worker" {
       image   = var.airflow_image
       cpu     = local.worker_cpu
       memory  = local.worker_mem
-      command = ["airflow", "celery", "worker"]
+      command = ["celery", "worker"]
 
       dynamic "env" {
         for_each = concat(local.common_env, [

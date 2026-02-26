@@ -366,6 +366,72 @@ stages:
                     workingDirectory: $(workingDirectory)
 
                 - task: AzureCLI@2
+                  displayName: 'Initialize Airflow Database'
+                  inputs:
+                    azureSubscription: 'Azure-ServiceConnection'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      
+                      RG_NAME="$(terraform output -raw resource_group_name)"
+                      ENV_NAME="${{ parameters.environment }}"
+                      
+                      echo "=========================================="
+                      echo "Initializing Airflow Database"
+                      echo "=========================================="
+                      
+                      # Check if scheduler is running
+                      SCHEDULER_STATUS=$(az containerapp show \
+                        --name airflow-${ENV_NAME}-scheduler \
+                        --resource-group $RG_NAME \
+                        --query "properties.runningStatus" -o tsv 2>/dev/null || echo "Unknown")
+                      
+                      echo "Scheduler status: $SCHEDULER_STATUS"
+                      
+                      # Run db init via scheduler container
+                      echo "Running 'airflow db init'..."
+                      az containerapp exec \
+                        --name airflow-${ENV_NAME}-scheduler \
+                        --resource-group $RG_NAME \
+                        --command "airflow db init" || {
+                          echo "⚠️  Failed to run db init via exec, trying alternative method..."
+                          
+                          # Alternative: Create a one-time job to init the database
+                          echo "Creating temporary init job..."
+                          az containerapp job create \
+                            --name airflow-${ENV_NAME}-db-init \
+                            --resource-group $RG_NAME \
+                            --environment $(terraform output -raw aca_environment_id | rev | cut -d'/' -f1 | rev) \
+                            --trigger-type Manual \
+                            --replica-timeout 300 \
+                            --image $(terraform output -raw acr_login_server)/airflow:latest \
+                            --cpu 0.5 \
+                            --memory 1Gi \
+                            --command "airflow" "db" "init" \
+                            --env-vars $(az containerapp show --name airflow-${ENV_NAME}-scheduler --resource-group $RG_NAME --query "properties.template.containers[0].env" -o json | jq -r '.[] | "\(.name)=\(.value)"' | tr '\n' ' ') \
+                            --registry-server $(terraform output -raw acr_login_server) || echo "Job creation failed"
+                          
+                          # Start the job
+                          az containerapp job start \
+                            --name airflow-${ENV_NAME}-db-init \
+                            --resource-group $RG_NAME || echo "Job start failed"
+                          
+                          # Wait for completion
+                          sleep 30
+                          
+                          # Clean up
+                          az containerapp job delete \
+                            --name airflow-${ENV_NAME}-db-init \
+                            --resource-group $RG_NAME \
+                            --yes || echo "Job cleanup failed"
+                        }
+                      
+                      echo "✅ Database initialization completed"
+                      echo "=========================================="
+                    workingDirectory: $(workingDirectory)
+
+                - task: AzureCLI@2
                   displayName: 'Smoke Tests - Verify Container Apps Health'
                   condition: eq('${{ parameters.buildImages }}', true)
                   inputs:
