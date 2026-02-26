@@ -1,0 +1,16 @@
+parameters:
+  serviceConnection: ''
+  workingDirectory: ''
+
+steps:
+  - task: AzureCLI@2
+    displayName: 'Terraform fmt + validate'
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        set -euo pipefail
+        cd "${{ parameters.workingDirectory }}"
+        terraform fmt -check -recursive
+        terraform validate

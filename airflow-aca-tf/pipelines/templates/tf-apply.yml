@@ -1,0 +1,18 @@
+parameters:
+  serviceConnection: ''
+  workingDirectory: ''
+  planFile: 'tfplan'
+  tfEnv: {}
+
+steps:
+  - task: AzureCLI@2
+    displayName: 'Terraform apply'
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        set -euo pipefail
+        cd "${{ parameters.workingDirectory }}"
+        terraform apply -input=false -auto-approve "${{ parameters.planFile }}"
+    env: ${{ parameters.tfEnv }}

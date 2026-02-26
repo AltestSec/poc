@@ -1,0 +1,23 @@
+parameters:
+  serviceConnection: ''
+  workingDirectory: ''
+  backendResourceGroup: ''
+  backendStorageAccount: ''
+  backendContainer: ''
+  backendKey: ''
+
+steps:
+  - task: AzureCLI@2
+    displayName: 'Terraform init'
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        set -euo pipefail
+        cd "${{ parameters.workingDirectory }}"
+        terraform init -input=false -reconfigure \
+          -backend-config="resource_group_name=${{ parameters.backendResourceGroup }}" \
+          -backend-config="storage_account_name=${{ parameters.backendStorageAccount }}" \
+          -backend-config="container_name=${{ parameters.backendContainer }}" \
+          -backend-config="key=${{ parameters.backendKey }}"

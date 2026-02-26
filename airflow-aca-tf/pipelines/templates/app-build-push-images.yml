@@ -1,0 +1,48 @@
+parameters:
+  serviceConnection: ''
+  dockerRoot: ''
+  buildId: ''
+  imageTag: ''   # optional; if empty -> uses current commit short SHA
+
+steps:
+  - task: AzureCLI@2
+    displayName: 'CI: Build & Push Images'
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        set -euo pipefail
+        
+        # Prefer tag provided by pipeline param; otherwise use commit SHA
+        if [ -n "${{ parameters.imageTag }}" ]; then
+          TAG="${{ parameters.imageTag }}"
+        else
+          TAG="$(Build.SourceVersion)"
+          TAG="${TAG:0:8}"
+        fi
+        
+        if [ -z "${ACR_NAME:-}" ]; then
+          echo "ACR_NAME variable must be set (Library variable/group)."
+          exit 1
+        fi
+        
+        ACR_LOGIN_SERVER="$(az acr show -n "$ACR_NAME" --query loginServer -o tsv)"
+        az acr login --name "$ACR_NAME"
+        
+        echo "Using tag: $TAG"
+        echo "ACR: $ACR_LOGIN_SERVER"
+        
+        cd "${{ parameters.dockerRoot }}/airflow"
+        docker build --platform linux/amd64 \
+          -t "$ACR_LOGIN_SERVER/airflow:$TAG" \
+          -t "$ACR_LOGIN_SERVER/airflow:${{ parameters.buildId }}" .
+        docker push "$ACR_LOGIN_SERVER/airflow:$TAG"
+        docker push "$ACR_LOGIN_SERVER/airflow:${{ parameters.buildId }}"
+        
+        cd "${{ parameters.dockerRoot }}/etl-runner"
+        docker build --platform linux/amd64 \
+          -t "$ACR_LOGIN_SERVER/etl-runner:$TAG" \
+          -t "$ACR_LOGIN_SERVER/etl-runner:${{ parameters.buildId }}" .
+        docker push "$ACR_LOGIN_SERVER/etl-runner:$TAG"
+        docker push "$ACR_LOGIN_SERVER/etl-runner:${{ parameters.buildId }}"

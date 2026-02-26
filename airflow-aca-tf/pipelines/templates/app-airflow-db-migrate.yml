@@ -1,0 +1,24 @@
+parameters:
+  serviceConnection: ''
+  workingDirectory: ''
+  envName: ''
+
+steps:
+  - task: AzureCLI@2
+    displayName: 'CD: Airflow metadata DB migrate'
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        set -euo pipefail
+        cd "${{ parameters.workingDirectory }}"
+        
+        RG_NAME="$(terraform output -raw resource_group_name)"
+        ENV="${{ parameters.envName }}"
+        
+        # Idempotent: safe to run on each deploy
+        az containerapp exec \
+          --name "airflow-${ENV}-scheduler" \
+          --resource-group "$RG_NAME" \
+          --command "airflow db migrate"
