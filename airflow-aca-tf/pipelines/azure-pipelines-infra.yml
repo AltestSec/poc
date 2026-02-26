@@ -4,32 +4,10 @@ trigger:
   paths:
     include:
       - airflow-aca-tf/terraform/**
-      - airflow-aca-tf/docker/**
-      - airflow-aca-tf/pipelines/**
+      - airflow-aca-tf/pipelines/templates/tf-*.yml
 
 parameters:
-  # "checkboxes"
-  - name: runBuild
-    displayName: 'CI: Build & Push Docker Images'
-    type: boolean
-    default: true
-  
-  - name: runInfra
-    displayName: 'CD: Terraform (Plan/Apply/Destroy)'
-    type: boolean
-    default: true
-  
-  - name: runAppDeploy
-    displayName: 'CD: Deploy Apps + DB migrations + Smoke tests'
-    type: boolean
-    default: false
-  
-  - name: runBusinessDbMigrations
-    displayName: 'CD: Run Business DB migrations (your DB)'
-    type: boolean
-    default: false
-  
-  # infra controls
+  # environment controls
   - name: environment
     displayName: 'Environment'
     type: string
@@ -41,12 +19,6 @@ parameters:
     type: string
     default: 'plan'
     values: [ plan, apply, destroy ]
-  
-  # app deploy controls
-  - name: imageTag
-    displayName: 'Image tag to deploy (e.g. 8-char commit SHA). Leave empty to use current commit SHA.'
-    type: string
-    default: ''
 
 variables:
   - name: terraformVersion
@@ -55,8 +27,6 @@ variables:
     value: 'Azure-ServiceConnection'
   - name: workingDirectory
     value: '$(System.DefaultWorkingDirectory)/airflow-aca-tf/terraform'
-  - name: dockerRoot
-    value: '$(System.DefaultWorkingDirectory)/airflow-aca-tf/docker'
   - name: ownerEmail
     value: $(Build.RequestedForEmail)
   - name: backendKey
@@ -69,36 +39,10 @@ variables:
 
 stages:
   # ------------------------
-  # CI: Build Images
-  # ------------------------
-  - stage: Build
-    displayName: 'CI: Build & Push Images'
-    condition: eq(${{ parameters.runBuild }}, true)
-    jobs:
-      - job: BuildPush
-        pool: { vmImage: ubuntu-latest }
-        steps:
-          - checkout: self
-          
-          - template: templates/tf-install.yml
-            parameters:
-              terraformVersion: $(terraformVersion)
-          
-          # Build+push uses commit SHA short tag by default
-          - template: templates/app-build-push-images.yml
-            parameters:
-              serviceConnection: $(serviceConnection)
-              dockerRoot: $(dockerRoot)
-              buildId: $(Build.BuildId)
-              # Use current commit for tag unless user provided imageTag
-              imageTag: ${{ coalesce(parameters.imageTag, '') }}
-
-  # ------------------------
-  # CD: Infra (Terraform)
+  # Infra (Terraform)
   # ------------------------
   - stage: Infra
-    displayName: 'CD: Terraform'
-    condition: eq(${{ parameters.runInfra }}, true)
+    displayName: 'Terraform Infrastructure'
     jobs:
       - job: Validate
         displayName: 'Terraform Validate'
@@ -242,63 +186,3 @@ stages:
                       TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)
                       TF_VAR_owner: $(Build.RequestedForEmail)
                       TF_VAR_duedate: $(DUE_DATE)
-
-  # ------------------------
-  # CD: App Deploy
-  # ------------------------
-  - stage: AppDeploy
-    displayName: 'CD: Deploy Apps + DB migrations + Smoke tests'
-    dependsOn:
-      - Build
-      - Infra
-    condition: eq(${{ parameters.runAppDeploy }}, true)
-    jobs:
-      - deployment: DeployApps
-        environment: '${{ parameters.environment }}-apps'  # Requires approval in Azure DevOps
-        pool: { vmImage: ubuntu-latest }
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - checkout: self
-                
-                # Make sure terraform outputs are accessible (backend already exists)
-                - template: templates/tf-install.yml
-                  parameters: { terraformVersion: $(terraformVersion) }
-                
-                - template: templates/tf-init.yml
-                  parameters:
-                    serviceConnection: $(serviceConnection)
-                    workingDirectory: $(workingDirectory)
-                    backendResourceGroup: $(backendResourceGroup)
-                    backendStorageAccount: $(backendStorageAccount)
-                    backendContainer: $(backendContainer)
-                    backendKey: $(backendKey)
-                
-                - template: templates/app-update-containerapps.yml
-                  parameters:
-                    serviceConnection: $(serviceConnection)
-                    workingDirectory: $(workingDirectory)
-                    envName: ${{ parameters.environment }}
-                    imageTag: ${{ parameters.imageTag }}
-                
-                # Airflow metadata DB migrations (recommended, idempotent)
-                - template: templates/app-airflow-db-migrate.yml
-                  parameters:
-                    serviceConnection: $(serviceConnection)
-                    workingDirectory: $(workingDirectory)
-                    envName: ${{ parameters.environment }}
-                
-                # Your "business" DB migrations (optional)
-                - template: templates/app-business-db-migrate.yml
-                  parameters:
-                    enabled: ${{ parameters.runBusinessDbMigrations }}
-                    serviceConnection: $(serviceConnection)
-                    workingDirectory: $(workingDirectory)
-                    envName: ${{ parameters.environment }}
-                
-                - template: templates/app-smoke-tests.yml
-                  parameters:
-                    serviceConnection: $(serviceConnection)
-                    workingDirectory: $(workingDirectory)
-                    envName: ${{ parameters.environment }}
