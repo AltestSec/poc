@@ -15,12 +15,12 @@ resource "azurerm_postgresql_flexible_server" "postgres" {
   lifecycle {
     ignore_changes = [zone]
   }
-#  dynamic "high_availability" {
-#    for_each = var.deployment_mode == "production" ? [1] : []
-#    content {
-#      mode = "ZoneRedundant"
-#    }
-#  }
+  #  dynamic "high_availability" {
+  #    for_each = var.deployment_mode == "production" ? [1] : []
+  #    content {
+  #      mode = "ZoneRedundant"
+  #    }
+  #  }
 
   tags = var.tags
 }
