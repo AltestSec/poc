@@ -3,14 +3,20 @@ parameters:
   workingDirectory: ''
 
 steps:
-  - task: AzureCLI@2
-    displayName: 'Terraform fmt + validate'
+  - task: TerraformTask@5
+    displayName: 'Terraform Validate'
     inputs:
-      azureSubscription: ${{ parameters.serviceConnection }}
-      scriptType: bash
-      scriptLocation: inlineScript
-      inlineScript: |
-        set -euo pipefail
-        cd "${{ parameters.workingDirectory }}"
-        terraform fmt -check -recursive
-        terraform validate
+      provider: 'azurerm'
+      command: 'validate'
+      workingDirectory: ${{ parameters.workingDirectory }}
+      environmentServiceNameAzureRM: ${{ parameters.serviceConnection }}
+
+  - task: TerraformTask@5
+    displayName: 'Terraform Format Check'
+    inputs:
+      provider: 'azurerm'
+      command: 'custom'
+      customCommand: 'fmt'
+      commandOptions: '-check -recursive'
+      workingDirectory: ${{ parameters.workingDirectory }}
+      environmentServiceNameAzureRM: ${{ parameters.serviceConnection }}

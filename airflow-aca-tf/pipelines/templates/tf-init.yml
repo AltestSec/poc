@@ -12,20 +12,9 @@ steps:
     inputs:
       provider: 'azurerm'
       command: 'init'
-      workingDirectory: $(workingDirectory)
-      backendServiceArm: 'Azure-ServiceConnection'
-      backendAzureRmResourceGroupName: $(backendResourceGroup)
-      backendAzureRmStorageAccountName: $(backendStorageAccount)
-      backendAzureRmContainerName: $(backendContainer)
-      backendAzureRmKey: 'airflow-${{ parameters.environment }}.tfstate'
-      # azureSubscription: ${{ parameters.serviceConnection }}
-      # scriptType: bash
-      # scriptLocation: inlineScript
-      # inlineScript: |
-      #   set -euo pipefail
-      #   cd "${{ parameters.workingDirectory }}"
-      #   terraform init -input=false -reconfigure \
-      #     -backend-config="resource_group_name=${{ parameters.backendResourceGroup }}" \
-      #     -backend-config="storage_account_name=${{ parameters.backendStorageAccount }}" \
-      #     -backend-config="container_name=${{ parameters.backendContainer }}" \
-      #     -backend-config="key=${{ parameters.backendKey }}"
+      workingDirectory: ${{ parameters.workingDirectory }}
+      backendServiceArm: ${{ parameters.serviceConnection }}
+      backendAzureRmResourceGroupName: ${{ parameters.backendResourceGroup }}
+      backendAzureRmStorageAccountName: ${{ parameters.backendStorageAccount }}
+      backendAzureRmContainerName: ${{ parameters.backendContainer }}
+      backendAzureRmKey: ${{ parameters.backendKey }}

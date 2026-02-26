@@ -6,16 +6,12 @@ parameters:
   tfEnv: {}
 
 steps:
-  - task: AzureCLI@2
+  - task: TerraformTask@5
     displayName: 'Terraform destroy'
     inputs:
-      azureSubscription: ${{ parameters.serviceConnection }}
-      scriptType: bash
-      scriptLocation: inlineScript
-      inlineScript: |
-        set -euo pipefail
-        cd "${{ parameters.workingDirectory }}"
-        terraform destroy -auto-approve \
-          -var-file="${{ parameters.tfvarsFile }}" \
-          -var="owner=${{ parameters.owner }}"
+      provider: 'azurerm'
+      command: 'destroy'
+      workingDirectory: ${{ parameters.workingDirectory }}
+      commandOptions: '-var-file=${{ parameters.tfvarsFile }} -var="owner=${{ parameters.owner }}"'
+      environmentServiceNameAzureRM: ${{ parameters.serviceConnection }}
     env: ${{ parameters.tfEnv }}
