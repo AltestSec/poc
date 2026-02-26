@@ -1,14 +1,21 @@
 locals {
-  scheduler_cpu = var.deployment_mode == "production" ? 1.0 : 0.5
-  scheduler_mem = var.deployment_mode == "production" ? "2Gi" : "1Gi"
+  # Resource allocation based on Azure Container Apps valid combinations
+  # Valid combinations: [0.25, 0.5Gi], [0.5, 1.0Gi], [0.75, 1.5Gi], [1.0, 2.0Gi], etc.
+  # Airflow minimum: 4GB total for all containers
+
+  scheduler_cpu = var.deployment_mode == "production" ? 1.0 : 0.75
+  scheduler_mem = var.deployment_mode == "production" ? "2Gi" : "1.5Gi"
   scheduler_min = var.deployment_mode == "production" ? 2 : 1
 
-  webserver_cpu = var.deployment_mode == "production" ? 0.5 : 0.25
-  webserver_mem = var.deployment_mode == "production" ? "1Gi" : "0.5Gi"
-  webserver_min = var.deployment_mode == "production" ? 1 : 0
+  webserver_cpu = var.deployment_mode == "production" ? 1.0 : 0.75
+  webserver_mem = var.deployment_mode == "production" ? "2Gi" : "1.5Gi"
+  webserver_min = 1 # Always keep at least 1 replica for web access
 
   worker_cpu = var.deployment_mode == "production" ? 1.0 : 0.5
   worker_mem = var.deployment_mode == "production" ? "2Gi" : "1Gi"
+
+  triggerer_cpu = 0.25
+  triggerer_mem = "0.5Gi"
 
   pg_conn_str = "postgresql://airflow:${var.postgres_password}@${var.postgres_host}/airflow?sslmode=require"
   redis_url   = "rediss://:${var.redis_primary_key}@${var.redis_host}:6380/0"
@@ -58,7 +65,7 @@ resource "azurerm_container_app" "scheduler" {
       image   = var.airflow_image
       cpu     = local.scheduler_cpu
       memory  = local.scheduler_mem
-      command = ["bash", "-c", "airflow db check || airflow db init; airflow db check-migrations || airflow db migrate; airflow users list | grep -q admin || airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin; airflow scheduler"]
+      command = ["airflow", "scheduler"]
 
       dynamic "env" {
         for_each = local.common_env
@@ -160,7 +167,7 @@ resource "azurerm_container_app" "webserver" {
   }
 
   ingress {
-    external_enabled = false
+    external_enabled = true
     target_port      = 8080
     transport        = "http"
 
@@ -194,10 +201,24 @@ resource "azurerm_container_app" "webserver" {
         path = "/opt/airflow/dags"
       }
 
+      liveness_probe {
+        transport               = "HTTP"
+        port                    = 8080
+        path                    = "/health"
+        initial_delay           = 1
+        interval_seconds        = 30
+        timeout                 = 5
+        failure_count_threshold = 10
+      }
+
       readiness_probe {
-        transport = "HTTP"
-        port      = 8080
-        path      = "/health"
+        transport               = "HTTP"
+        port                    = 8080
+        path                    = "/health"
+        interval_seconds        = 10
+        timeout                 = 5
+        success_count_threshold = 1
+        failure_count_threshold = 10
       }
     }
 
