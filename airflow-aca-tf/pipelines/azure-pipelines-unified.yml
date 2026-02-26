@@ -216,32 +216,32 @@ stages:
           runOnce:
             deploy:
               steps:
-          - checkout: self
+                - checkout: self
           
-          - template: templates/tf-install.yml
-            parameters: { terraformVersion: $(terraformVersion) }
-          
-          - template: templates/tf-init.yml
-            parameters:
-              serviceConnection: $(serviceConnection)
-              workingDirectory: $(workingDirectory)
-              backendResourceGroup: $(backendResourceGroup)
-              backendStorageAccount: $(backendStorageAccount)
-              backendContainer: $(backendContainer)
-              backendKey: $(backendKey)
-          
-          - template: templates/tf-destroy.yml
-            parameters:
-              serviceConnection: $(serviceConnection)
-              workingDirectory: $(workingDirectory)
-              tfvarsFile: $(tfvarsFile)
-              owner: $(ownerEmail)
-              tfEnv:
-                TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
-                TF_VAR_airflow_webserver_secret_key: $(AIRFLOW_WEBSERVER_SECRET_KEY)
-                TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)
-                TF_VAR_owner: $(Build.RequestedForEmail)
-                TF_VAR_duedate: $(DUE_DATE)
+                - template: templates/tf-install.yml
+                  parameters: { terraformVersion: $(terraformVersion) }
+                
+                - template: templates/tf-init.yml
+                  parameters:
+                    serviceConnection: $(serviceConnection)
+                    workingDirectory: $(workingDirectory)
+                    backendResourceGroup: $(backendResourceGroup)
+                    backendStorageAccount: $(backendStorageAccount)
+                    backendContainer: $(backendContainer)
+                    backendKey: $(backendKey)
+                
+                - template: templates/tf-destroy.yml
+                  parameters:
+                    serviceConnection: $(serviceConnection)
+                    workingDirectory: $(workingDirectory)
+                    tfvarsFile: $(tfvarsFile)
+                    owner: $(ownerEmail)
+                    tfEnv:
+                      TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
+                      TF_VAR_airflow_webserver_secret_key: $(AIRFLOW_WEBSERVER_SECRET_KEY)
+                      TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)
+                      TF_VAR_owner: $(Build.RequestedForEmail)
+                      TF_VAR_duedate: $(DUE_DATE)
 
   # ------------------------
   # CD: App Deploy
