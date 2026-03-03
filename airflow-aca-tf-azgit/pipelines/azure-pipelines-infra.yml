@@ -1,0 +1,194 @@
+trigger:
+  branches:
+    include: [ main, develop, feature/* ]
+  paths:
+    include:
+      - airflow-aca-tf/terraform/**
+      - airflow-aca-tf/pipelines/templates/tf-*.yml
+
+parameters:
+  # environment controls
+  - name: environment
+    displayName: 'Environment'
+    type: string
+    default: 'poc'
+    values: [ poc, prod ]
+  
+  - name: infraAction
+    displayName: 'Terraform action'
+    type: string
+    default: 'plan'
+    values: [ plan, apply, destroy ]
+
+variables:
+  - name: terraformVersion
+    value: '1.7.0'
+  - name: serviceConnection
+    value: 'Azure-ServiceConnection'
+  - name: workingDirectory
+    value: '$(System.DefaultWorkingDirectory)/airflow-aca-tf/terraform'
+  - name: ownerEmail
+    value: $(Build.RequestedForEmail)
+  - name: backendKey
+    value: 'airflow-${{ parameters.environment }}.tfstate'
+  - name: tfvarsFile
+    value: 'environments/${{ parameters.environment }}/terraform.tfvars'
+  - group: ETL-TFSTATE-BACK
+  - group: tags
+  - group: DB-VARS
+
+stages:
+  # ------------------------
+  # Infra (Terraform)
+  # ------------------------
+  - stage: Infra
+    displayName: 'Terraform Infrastructure'
+    jobs:
+      - job: Validate
+        displayName: 'Terraform Validate'
+        pool: { vmImage: ubuntu-latest }
+        steps:
+          - checkout: self
+          
+          - template: templates/tf-install.yml
+            parameters: { terraformVersion: $(terraformVersion) }
+          
+          - template: templates/tf-init.yml
+            parameters:
+              # serviceConnection: $(serviceConnection)
+              # workingDirectory: $(workingDirectory)
+              # backendResourceGroup: $(backendResourceGroup)
+              # backendStorageAccount: $(backendStorageAccount)
+              # backendContainer: $(backendContainer)
+              # backendKey: $(backendKey)
+              workingDirectory: $(workingDirectory)
+              backendServiceArm: 'Azure-ServiceConnection'
+              backendAzureRmResourceGroupName: $(backendResourceGroup)
+              backendAzureRmStorageAccountName: $(backendStorageAccount)
+              backendAzureRmContainerName: $(backendContainer)
+              backendAzureRmKey: 'airflow-${{ parameters.environment }}.tfstate'
+          
+          - template: templates/tf-fmt-validate.yml
+            parameters:
+              serviceConnection: $(serviceConnection)
+              workingDirectory: $(workingDirectory)
+
+      - job: Plan
+        displayName: 'Terraform Plan'
+        dependsOn: Validate
+        condition: and(succeeded(), in('${{ parameters.infraAction }}', 'plan', 'apply'))
+        pool: { vmImage: ubuntu-latest }
+        steps:
+          - checkout: self
+          
+          - template: templates/tf-install.yml
+            parameters: { terraformVersion: $(terraformVersion) }
+          
+          - template: templates/tf-init.yml
+            parameters:
+              serviceConnection: $(serviceConnection)
+              workingDirectory: $(workingDirectory)
+              backendResourceGroup: $(backendResourceGroup)
+              backendStorageAccount: $(backendStorageAccount)
+              backendContainer: $(backendContainer)
+              backendKey: $(backendKey)
+          
+          - template: templates/tf-plan.yml
+            parameters:
+              serviceConnection: $(serviceConnection)
+              workingDirectory: $(workingDirectory)
+              tfvarsFile: $(tfvarsFile)
+              owner: $(ownerEmail)
+              planOut: tfplan
+              tfEnv:
+                TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
+                TF_VAR_airflow_webserver_secret_key: $(AIRFLOW_WEBSERVER_SECRET_KEY)
+                TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)
+                TF_VAR_owner: $(Build.RequestedForEmail)
+                TF_VAR_duedate: $(DUE_DATE)
+          
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish Plan'
+            inputs:
+              targetPath: '$(workingDirectory)/tfplan'
+              artifact: 'tfplan-${{ parameters.environment }}'
+              publishLocation: 'pipeline'
+
+      - deployment: Apply
+        displayName: 'Terraform Apply'
+        dependsOn: Plan
+        condition: and(succeeded(), eq('${{ parameters.infraAction }}', 'apply'))
+        environment: '${{ parameters.environment }}-infra'  # Requires approval in Azure DevOps
+        pool: { vmImage: ubuntu-latest }
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                
+                - task: DownloadPipelineArtifact@2
+                  displayName: 'Download Plan'
+                  inputs:
+                    artifact: 'tfplan-${{ parameters.environment }}'
+                    path: $(workingDirectory)
+                
+                - template: templates/tf-install.yml
+                  parameters: { terraformVersion: $(terraformVersion) }
+                
+                - template: templates/tf-init.yml
+                  parameters:
+                    serviceConnection: $(serviceConnection)
+                    workingDirectory: $(workingDirectory)
+                    backendResourceGroup: $(backendResourceGroup)
+                    backendStorageAccount: $(backendStorageAccount)
+                    backendContainer: $(backendContainer)
+                    backendKey: $(backendKey)
+                
+                - template: templates/tf-apply.yml
+                  parameters:
+                    serviceConnection: $(serviceConnection)
+                    workingDirectory: $(workingDirectory)
+                    planFile: tfplan
+                    tfEnv:
+                      TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
+                      TF_VAR_airflow_webserver_secret_key: $(AIRFLOW_WEBSERVER_SECRET_KEY)
+                      TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)
+                      TF_VAR_owner: $(Build.RequestedForEmail)
+                      TF_VAR_duedate: $(DUE_DATE)
+
+      - deployment: Destroy
+        displayName: 'Terraform Destroy'
+        dependsOn: Validate
+        condition: and(succeeded(), eq('${{ parameters.infraAction }}', 'destroy'))
+        environment: '${{ parameters.environment }}-destroy'  # Requires approval in Azure DevOps
+        pool: { vmImage: ubuntu-latest }
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+          
+                - template: templates/tf-install.yml
+                  parameters: { terraformVersion: $(terraformVersion) }
+                
+                - template: templates/tf-init.yml
+                  parameters:
+                    serviceConnection: $(serviceConnection)
+                    workingDirectory: $(workingDirectory)
+                    backendResourceGroup: $(backendResourceGroup)
+                    backendStorageAccount: $(backendStorageAccount)
+                    backendContainer: $(backendContainer)
+                    backendKey: $(backendKey)
+                
+                - template: templates/tf-destroy.yml
+                  parameters:
+                    serviceConnection: $(serviceConnection)
+                    workingDirectory: $(workingDirectory)
+                    tfvarsFile: $(tfvarsFile)
+                    owner: $(ownerEmail)
+                    tfEnv:
+                      TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
+                      TF_VAR_airflow_webserver_secret_key: $(AIRFLOW_WEBSERVER_SECRET_KEY)
+                      TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)
+                      TF_VAR_owner: $(Build.RequestedForEmail)
+                      TF_VAR_duedate: $(DUE_DATE)

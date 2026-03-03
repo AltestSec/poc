@@ -1,0 +1,20 @@
+parameters:
+  serviceConnection: ''
+  workingDirectory: ''
+  backendResourceGroup: ''
+  backendStorageAccount: ''
+  backendContainer: ''
+  backendKey: ''
+
+steps:
+  - task: TerraformTask@5
+    displayName: 'Terraform init'
+    inputs:
+      provider: 'azurerm'
+      command: 'init'
+      workingDirectory: ${{ parameters.workingDirectory }}
+      backendServiceArm: ${{ parameters.serviceConnection }}
+      backendAzureRmResourceGroupName: ${{ parameters.backendResourceGroup }}
+      backendAzureRmStorageAccountName: ${{ parameters.backendStorageAccount }}
+      backendAzureRmContainerName: ${{ parameters.backendContainer }}
+      backendAzureRmKey: ${{ parameters.backendKey }}

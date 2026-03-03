@@ -1,0 +1,30 @@
+parameters:
+  enabled: false
+  serviceConnection: ''
+  workingDirectory: ''
+  envName: ''
+
+steps:
+  - task: AzureCLI@2
+    displayName: 'CD: Business DB migrations'
+    condition: and(succeeded(), eq(${{ parameters.enabled }}, true))
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        set -euo pipefail
+        cd "${{ parameters.workingDirectory }}"
+        
+        RG_NAME="$(terraform output -raw resource_group_name)"
+        ENV="${{ parameters.envName }}"
+        
+        echo "Run your business DB migration here."
+        echo "Recommended: create/start a Container Apps Job that runs migrations idempotently."
+        echo "Example placeholders:"
+        echo "  - Flyway: flyway migrate"
+        echo "  - Liquibase: liquibase update"
+        echo "  - psql: run versioned SQL scripts"
+        
+        # Example: if you have a job already created:
+        # az containerapp job start --name "airflow-${ENV}-db-migrate" --resource-group "$RG_NAME"

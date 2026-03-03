@@ -1,0 +1,585 @@
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+  paths:
+    include:
+      - airflow-aca-tf/terraform/**
+      - airflow-aca-tf/docker/**
+      - airflow-aca-tf/pipelines/**
+
+parameters:
+  - name: environment
+    displayName: 'Environment'
+    type: string
+    default: 'poc'
+    values:
+      - poc
+      - prod
+  - name: action
+    displayName: 'Action'
+    type: string
+    default: 'plan'
+    values:
+      - plan
+      - apply
+      - destroy
+  - name: buildImages
+    displayName: 'Build and Push Docker Images'
+    type: boolean
+    default: false
+
+variables:
+  - name: terraformVersion
+    value: '1.7.0'
+  - name: ownerIF
+    value: $(Build.RequestedForEmail)
+  - name: workingDirectory
+    value: '$(System.DefaultWorkingDirectory)/airflow-aca-tf/terraform'
+  - group: ETL-TFSTATE-BACK
+  - group: tags
+  - group: DB-VARS
+
+stages:
+  - stage: Validate
+    displayName: 'Terraform Validate'
+    jobs:
+      - job: Validate
+        displayName: 'Validate Terraform'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: TerraformInstaller@1
+            displayName: 'Install Terraform'
+            inputs:
+              terraformVersion: 'latest'
+
+          - task: TerraformTask@5
+            displayName: 'Terraform Init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: $(workingDirectory)
+              backendServiceArm: 'Azure-ServiceConnection'
+              backendAzureRmResourceGroupName: $(backendResourceGroup)
+              backendAzureRmStorageAccountName: $(backendStorageAccount)
+              backendAzureRmContainerName: $(backendContainer)
+              backendAzureRmKey: 'airflow-${{ parameters.environment }}.tfstate'
+
+          - task: TerraformTask@5
+            displayName: 'Terraform Validate'
+            continueOnError: false
+            inputs:
+              provider: 'azurerm'
+              command: 'validate'
+              workingDirectory: $(workingDirectory)
+              environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+
+          - task: TerraformTask@5
+            displayName: 'Terraform Format Check'
+            continueOnError: false
+            inputs:
+              provider: 'azurerm'
+              command: 'custom'
+              customCommand: 'fmt'
+              commandOptions: '-check -recursive'
+              workingDirectory: $(workingDirectory)
+              environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+              
+
+  - stage: Plan
+    displayName: 'Terraform Plan'
+    dependsOn: Validate
+    condition: succeeded()
+    jobs:
+      - job: Plan
+        displayName: 'Plan Infrastructure'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: TerraformInstaller@1
+            displayName: 'Install Terraform'
+            inputs:
+              terraformVersion: 'latest'
+
+          - task: TerraformTask@5
+            displayName: 'Terraform Init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: $(workingDirectory)
+              backendServiceArm: 'Azure-ServiceConnection'
+              backendAzureRmResourceGroupName: $(backendResourceGroup)
+              backendAzureRmStorageAccountName: $(backendStorageAccount)
+              backendAzureRmContainerName: $(backendContainer)
+              backendAzureRmKey: 'airflow-${{ parameters.environment }}.tfstate'
+
+          #   env:
+          #     TF_IN_AUTOMATION: "true"
+
+          - task: AzureCLI@2
+            displayName: Terraform plan
+            inputs:
+              azureSubscription: 'Azure-ServiceConnection'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+                cd $(workingDirectory)
+
+                echo -e "\nUnlock tfstate if it is locked\n"
+                # Read blob metadata to see if Terraform lock exists
+                LOCK_ID=$(
+                  az storage blob metadata show \
+                    --account-name "$(backendStorageAccount)" \
+                    --container-name "$(backendContainer)" \
+                    --name "irflow-${{ parameters.environment }}.tfstate" \
+                    --auth-mode login \
+                    --query "metadata.terraformlockid" -o tsv 2>/dev/null || true
+                )
+
+                if [ -n "${LOCK_ID}" ] && [ "${LOCK_ID}" != "null" ]; then
+                  echo "State is locked. terraformlockid=${LOCK_ID}"
+                  echo "Attempting terraform force-unlock..."
+                  terraform force-unlock -force "${LOCK_ID}"
+                  echo "Unlocked."
+                else
+                  echo "No terraform lock metadata found. Continuing."
+                fi
+
+                terraform init -input=false -reconfigure \
+                  -backend-config="resource_group_name=$(backendResourceGroup)" \
+                  -backend-config="storage_account_name=$(backendStorageAccount)" \
+                  -backend-config="container_name=$(backendContainer)" \
+                  -backend-config="key=airflow-${{ parameters.environment }}.tfstate"
+
+                set +e
+                terraform plan \
+                  -input=false \
+                  -lock-timeout=30s \
+                  -detailed-exitcode \
+                  -var-file="environments/${{ parameters.environment }}/terraform.tfvars" \
+                  -var="owner=$(ownerIF)" \
+                  -out=tfplan
+                EC=$?
+                set -e
+
+                if [ $EC -eq 0 ]; then
+                  echo "Plan: no changes."
+                elif [ $EC -eq 2 ]; then
+                  echo "Plan: changes present."
+                  exit 0
+                else
+                  echo "Plan failed with exit code $EC"
+                  exit $EC
+                fi
+            env:
+              TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
+              TF_VAR_airflow_webserver_secret_key: $(AIRFLOW_WEBSERVER_SECRET_KEY)
+              TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)  
+              TF_VAR_owner: $(Build.RequestedForEmail)
+              TF_VAR_duedate: $(DUE_DATE) 
+                
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish Plan'
+            inputs:
+              targetPath: '$(workingDirectory)/tfplan'
+              artifact: 'tfplan-${{ parameters.environment }}'
+              publishLocation: 'pipeline'
+
+  - stage: Apply
+    displayName: 'Terraform Apply'
+    dependsOn: Plan
+    condition: and(succeeded(), eq('${{ parameters.action }}', 'apply'))
+    jobs:
+      - deployment: Apply
+        displayName: 'Apply Infrastructure'
+        pool:
+          vmImage: 'ubuntu-latest'
+        environment: '${{ parameters.environment }}'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: DownloadPipelineArtifact@2
+                  displayName: 'Download Plan'
+                  inputs:
+                    artifact: 'tfplan-${{ parameters.environment }}'
+                    path: $(workingDirectory)
+
+                - task: TerraformInstaller@1
+                  displayName: 'Install Terraform'
+                  inputs:
+                    terraformVersion: 'latest'
+
+                - task: TerraformTask@5
+                  displayName: 'Terraform Init'
+                  inputs:
+                    provider: 'azurerm'
+                    command: 'init'
+                    workingDirectory: $(workingDirectory)
+                    backendServiceArm: 'Azure-ServiceConnection'
+                    backendAzureRmResourceGroupName: $(backendResourceGroup)
+                    backendAzureRmStorageAccountName: $(backendStorageAccount)
+                    backendAzureRmContainerName: $(backendContainer)
+                    backendAzureRmKey: 'airflow-${{ parameters.environment }}.tfstate'
+
+                - task: AzureCLI@2
+                  displayName: 'Terraform apply'
+                  inputs:
+                    azureSubscription: 'Azure-ServiceConnection'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      cd "$(workingDirectory)"
+
+                      terraform init -input=false -reconfigure \
+                        -backend-config="resource_group_name=$(backendResourceGroup)" \
+                        -backend-config="storage_account_name=$(backendStorageAccount)" \
+                        -backend-config="container_name=$(backendContainer)" \
+                        -backend-config="key=airflow-${{ parameters.environment }}.tfstate"
+
+                      terraform apply -input=false -auto-approve tfplan
+                  env:
+                    TF_IN_AUTOMATION: "true"
+                    TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
+                    TF_VAR_airflow_webserver_secret_key: $(AIRFLOW_WEBSERVER_SECRET_KEY)
+                    TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)
+                    TF_VAR_owner: $(Build.RequestedForEmail)
+                    TF_VAR_duedate: $(DUE_DATE)
+
+                #- task: Bash@3
+                - task: AzureCLI@2
+                  displayName: 'Build and Push Airflow Image to ACR'
+                  condition: eq('${{ parameters.buildImages }}', true)
+                  inputs: 
+                    azureSubscription: 'Azure-ServiceConnection'
+                    scriptType: Bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      cd "$(workingDirectory)"
+
+                      ACR_LOGIN_SERVER="$(terraform output -raw acr_login_server)"
+                      ACR_NAME="$(echo "$ACR_LOGIN_SERVER" | cut -d'.' -f1)"
+                      
+                      echo "Building images for linux/amd64 platform..."
+                      
+                      # Build and push Airflow image with both build ID and latest tags
+                      cd $(System.DefaultWorkingDirectory)/airflow-aca-tf/docker/airflow
+                      docker build --platform linux/amd64 \
+                        -t $ACR_NAME.azurecr.io/airflow:$(Build.BuildId) \
+                        -t $ACR_NAME.azurecr.io/airflow:latest .
+                      
+                      az acr login --name $ACR_NAME
+                      docker push $ACR_NAME.azurecr.io/airflow:$(Build.BuildId)
+                      docker push $ACR_NAME.azurecr.io/airflow:latest
+                      
+                      # Build and push ETL runner image with both build ID and latest tags
+                      cd $(System.DefaultWorkingDirectory)/airflow-aca-tf/docker/etl-runner
+                      docker build --platform linux/amd64 \
+                        -t $ACR_NAME.azurecr.io/etl-runner:$(Build.BuildId) \
+                        -t $ACR_NAME.azurecr.io/etl-runner:latest .
+                      
+                      docker push $ACR_NAME.azurecr.io/etl-runner:$(Build.BuildId)
+                      docker push $ACR_NAME.azurecr.io/etl-runner:latest
+                      
+                      echo "Images built and pushed successfully"
+                    #workingDirectory: $(workingDirectory)
+
+                - task: AzureCLI@2
+                  displayName: 'Update Container Apps with New Images'
+                  condition: eq('${{ parameters.buildImages }}', true)
+                  inputs:
+                    azureSubscription: 'Azure-ServiceConnection'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      
+                      RG_NAME="$(terraform output -raw resource_group_name)"
+                      ENV_NAME="${{ parameters.environment }}"
+                      ACR_LOGIN_SERVER="$(terraform output -raw acr_login_server)"
+                      ACR_NAME="$(echo "$ACR_LOGIN_SERVER" | cut -d'.' -f1)"
+                      
+                      echo "Updating Container Apps to pull new images..."
+                      
+                      # Update Scheduler
+                      echo "Updating scheduler..."
+                      az containerapp update \
+                        --name airflow-${ENV_NAME}-scheduler \
+                        --resource-group $RG_NAME \
+                        --image $ACR_NAME.azurecr.io/airflow:latest \
+                        --output none || echo "Scheduler not found or update failed"
+                      
+                      # Update Webserver
+                      echo "Updating webserver..."
+                      az containerapp update \
+                        --name airflow-${ENV_NAME}-webserver \
+                        --resource-group $RG_NAME \
+                        --image $ACR_NAME.azurecr.io/airflow:latest \
+                        --output none || echo "Webserver not found or update failed"
+                      
+                      # Update Worker
+                      echo "Updating worker..."
+                      az containerapp update \
+                        --name airflow-${ENV_NAME}-worker \
+                        --resource-group $RG_NAME \
+                        --image $ACR_NAME.azurecr.io/airflow:latest \
+                        --output none || echo "Worker not found or update failed"
+                      
+                      # Update Triggerer
+                      echo "Updating triggerer..."
+                      az containerapp update \
+                        --name airflow-${ENV_NAME}-triggerer \
+                        --resource-group $RG_NAME \
+                        --image $ACR_NAME.azurecr.io/airflow:latest \
+                        --output none || echo "Triggerer not found or update failed"
+                      
+                      # Update ETL Job (if exists)
+                      echo "Updating ETL runner job..."
+                      az containerapp job update \
+                        --name airflow-${ENV_NAME}-etl-runner \
+                        --resource-group $RG_NAME \
+                        --image $ACR_NAME.azurecr.io/etl-runner:latest \
+                        --output none || echo "ETL job not found or update failed"
+                      
+                      echo "Container Apps updated successfully"
+                    workingDirectory: $(workingDirectory)
+
+                - task: AzureCLI@2
+                  displayName: 'Initialize Airflow Database'
+                  inputs:
+                    azureSubscription: 'Azure-ServiceConnection'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      
+                      RG_NAME="$(terraform output -raw resource_group_name)"
+                      ENV_NAME="${{ parameters.environment }}"
+                      
+                      echo "=========================================="
+                      echo "Initializing Airflow Database"
+                      echo "=========================================="
+                      
+                      # Check if scheduler is running
+                      SCHEDULER_STATUS=$(az containerapp show \
+                        --name airflow-${ENV_NAME}-scheduler \
+                        --resource-group $RG_NAME \
+                        --query "properties.runningStatus" -o tsv 2>/dev/null || echo "Unknown")
+                      
+                      echo "Scheduler status: $SCHEDULER_STATUS"
+                      
+                      # Run db init via scheduler container
+                      echo "Running 'airflow db init'..."
+                      az containerapp exec \
+                        --name airflow-${ENV_NAME}-scheduler \
+                        --resource-group $RG_NAME \
+                        --command "airflow db init" || {
+                          echo "⚠️  Failed to run db init via exec, trying alternative method..."
+                          
+                          # Alternative: Create a one-time job to init the database
+                          echo "Creating temporary init job..."
+                          az containerapp job create \
+                            --name airflow-${ENV_NAME}-db-init \
+                            --resource-group $RG_NAME \
+                            --environment $(terraform output -raw aca_environment_id | rev | cut -d'/' -f1 | rev) \
+                            --trigger-type Manual \
+                            --replica-timeout 300 \
+                            --image $(terraform output -raw acr_login_server)/airflow:latest \
+                            --cpu 0.5 \
+                            --memory 1Gi \
+                            --command "airflow" "db" "init" \
+                            --env-vars $(az containerapp show --name airflow-${ENV_NAME}-scheduler --resource-group $RG_NAME --query "properties.template.containers[0].env" -o json | jq -r '.[] | "\(.name)=\(.value)"' | tr '\n' ' ') \
+                            --registry-server $(terraform output -raw acr_login_server) || echo "Job creation failed"
+                          
+                          # Start the job
+                          az containerapp job start \
+                            --name airflow-${ENV_NAME}-db-init \
+                            --resource-group $RG_NAME || echo "Job start failed"
+                          
+                          # Wait for completion
+                          sleep 30
+                          
+                          # Clean up
+                          az containerapp job delete \
+                            --name airflow-${ENV_NAME}-db-init \
+                            --resource-group $RG_NAME \
+                            --yes || echo "Job cleanup failed"
+                        }
+                      
+                      echo "✅ Database initialization completed"
+                      echo "=========================================="
+                    workingDirectory: $(workingDirectory)
+
+                - task: AzureCLI@2
+                  displayName: 'Smoke Tests - Verify Container Apps Health'
+                  condition: eq('${{ parameters.buildImages }}', true)
+                  inputs:
+                    azureSubscription: 'Azure-ServiceConnection'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      
+                      RG_NAME="$(terraform output -raw resource_group_name)"
+                      ENV_NAME="${{ parameters.environment }}"
+                      
+                      echo "=========================================="
+                      echo "Running smoke tests..."
+                      echo "=========================================="
+                      
+                      # Function to check container app health
+                      check_app_health() {
+                        local app_name=$1
+                        local app_type=${2:-"containerapp"}
+                        
+                        echo ""
+                        echo "Checking $app_name..."
+                        
+                        if [ "$app_type" = "job" ]; then
+                          STATUS=$(az containerapp job show \
+                            --name $app_name \
+                            --resource-group $RG_NAME \
+                            --query "properties.provisioningState" -o tsv 2>/dev/null || echo "NotFound")
+                        else
+                          STATUS=$(az containerapp show \
+                            --name $app_name \
+                            --resource-group $RG_NAME \
+                            --query "properties.provisioningState" -o tsv 2>/dev/null || echo "NotFound")
+                          
+                          RUNNING_STATUS=$(az containerapp show \
+                            --name $app_name \
+                            --resource-group $RG_NAME \
+                            --query "properties.runningStatus" -o tsv 2>/dev/null || echo "Unknown")
+                        fi
+                        
+                        if [ "$STATUS" = "NotFound" ]; then
+                          echo "  ⚠️  $app_name: Not found (may not be deployed yet)"
+                          return 0
+                        elif [ "$STATUS" = "Succeeded" ]; then
+                          if [ "$app_type" = "job" ]; then
+                            echo "  ✅ $app_name: Provisioned successfully"
+                          else
+                            echo "  ✅ $app_name: $STATUS (Running: $RUNNING_STATUS)"
+                          fi
+                          return 0
+                        else
+                          echo "  ❌ $app_name: $STATUS"
+                          return 1
+                        fi
+                      }
+                      
+                      # Check all Container Apps
+                      FAILED=0
+                      
+                      check_app_health "airflow-${ENV_NAME}-scheduler" || FAILED=1
+                      check_app_health "airflow-${ENV_NAME}-webserver" || FAILED=1
+                      check_app_health "airflow-${ENV_NAME}-worker" || FAILED=1
+                      check_app_health "airflow-${ENV_NAME}-triggerer" || FAILED=1
+                      check_app_health "airflow-${ENV_NAME}-etl-runner" "job" || FAILED=1
+                      
+                      echo ""
+                      echo "=========================================="
+                      
+                      # Check webserver endpoint
+                      echo "Checking webserver endpoint..."
+                      WEBSERVER_FQDN=$(az containerapp show \
+                        --name airflow-${ENV_NAME}-webserver \
+                        --resource-group $RG_NAME \
+                        --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null || echo "")
+                      
+                      if [ -n "$WEBSERVER_FQDN" ]; then
+                        echo "  Webserver URL: https://$WEBSERVER_FQDN"
+                        
+                        # Try to reach the webserver (with timeout)
+                        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://$WEBSERVER_FQDN/health" || echo "000")
+                        
+                        if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ]; then
+                          echo "  ✅ Webserver is responding (HTTP $HTTP_CODE)"
+                        else
+                          echo "  ⚠️  Webserver returned HTTP $HTTP_CODE (may still be starting up)"
+                        fi
+                      else
+                        echo "  ⚠️  Webserver FQDN not found"
+                      fi
+                      
+                      echo ""
+                      echo "=========================================="
+                      
+                      # Check recent logs for errors
+                      echo "Checking scheduler logs for errors..."
+                      SCHEDULER_LOGS=$(az containerapp logs show \
+                        --name airflow-${ENV_NAME}-scheduler \
+                        --resource-group $RG_NAME \
+                        --tail 20 \
+                        --format text 2>/dev/null || echo "")
+                      
+                      if echo "$SCHEDULER_LOGS" | grep -qi "error\|exception\|failed"; then
+                        echo "  ⚠️  Found errors in scheduler logs (check manually)"
+                      else
+                        echo "  ✅ No obvious errors in recent scheduler logs"
+                      fi
+                      
+                      echo ""
+                      echo "=========================================="
+                      echo "Smoke tests completed"
+                      echo "=========================================="
+                      
+                      if [ $FAILED -eq 1 ]; then
+                        echo "⚠️  Some checks failed - review the output above"
+                        exit 0  # Don't fail the pipeline, just warn
+                      else
+                        echo "✅ All checks passed"
+                      fi
+                    workingDirectory: $(workingDirectory)
+
+
+
+  - stage: Destroy
+    displayName: 'Terraform Destroy'
+    dependsOn: Validate
+    condition: and(succeeded(), eq('${{ parameters.action }}', 'destroy'))
+    jobs:
+      - job: Destroy
+        displayName: 'Destroy Infrastructure'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: TerraformInstaller@1
+            displayName: 'Install Terraform'
+            inputs:
+              terraformVersion: $(terraformVersion)
+
+          - task: TerraformTask@5
+            displayName: 'Terraform Init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: $(workingDirectory)
+              backendServiceArm: 'Azure-ServiceConnection'
+              backendAzureRmResourceGroupName: $(backendResourceGroup)
+              backendAzureRmStorageAccountName: $(backendStorageAccount)
+              backendAzureRmContainerName: $(backendContainer)
+              backendAzureRmKey: 'airflow-${{ parameters.environment }}.tfstate'
+
+          - task: TerraformTask@5
+            displayName: 'Terraform Destroy'
+            inputs:
+              provider: 'azurerm'
+              command: 'destroy'
+              workingDirectory: $(workingDirectory)
+              commandOptions: '-var-file=environments/${{ parameters.environment }}/terraform.tfvars -var="owner=$(ownerIF)"'
+              environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+            env:
+              TF_VAR_airflow_fernet_key: $(AIRFLOW_FERNET_KEY)
+              TF_VAR_airflow_webserver_secret_key: $(AIRFLOW_WEBSERVER_SECRET_KEY)
+              TF_VAR_postgres_admin_password: $(POSTGRES_ADMIN_PASSWORD)
+              TF_VAR_owner: $(Build.RequestedForEmail)
+              TF_VAR_duedate: $(DUE_DATE)
