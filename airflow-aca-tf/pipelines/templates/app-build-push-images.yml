@@ -22,7 +22,7 @@ steps:
     displayName: 'Resolve Image Tag'
 
   - task: AzureCLI@2
-    displayName: 'Resolve ACR Login Server & Login'
+    displayName: 'Get ACR Name'
     inputs:
       azureSubscription: ${{ parameters.serviceConnection }}
       scriptType: bash
@@ -32,50 +32,20 @@ steps:
           echo "ACR_NAME variable must be set (Library variable/group)."
           exit 1
         fi
-        ACR_LOGIN_SERVER=$(az acr show -n "$ACR_NAME" --query loginServer -o tsv)
-        az acr login --name "$ACR_NAME"
-        echo "##vso[task.setvariable variable=ACR_LOGIN_SERVER]$ACR_LOGIN_SERVER"
+        echo "##vso[task.setvariable variable=ACR_NAME_RESOLVED]$ACR_NAME"
 
-  - task: Docker@2
-    displayName: 'Build Airflow Image'
+  # Build and push both images using ACR Tasks YAML
+  - task: AzureCLI@2
+    displayName: 'Build and Push Images (ACR Tasks)'
     inputs:
-      command: build
-      # No containerRegistry here - auth already handled by az acr login above
-      buildContext: '${{ parameters.dockerRoot }}/airflow'
-      dockerfile: '${{ parameters.dockerRoot }}/airflow/Dockerfile'
-      repository: '$(ACR_LOGIN_SERVER)/airflow'
-      tags: |
-        $(RESOLVED_TAG)
-        ${{ parameters.buildId }}
-      arguments: '--platform linux/amd64'
-
-  - task: Docker@2
-    displayName: 'Push Airflow Image'
-    inputs:
-      command: push
-      # No containerRegistry here - auth already handled by az acr login above
-      repository: '$(ACR_LOGIN_SERVER)/airflow'
-      tags: |
-        $(RESOLVED_TAG)
-        ${{ parameters.buildId }}
-
-  - task: Docker@2
-    displayName: 'Build ETL Runner Image'
-    inputs:
-      command: build
-      buildContext: '${{ parameters.dockerRoot }}/etl-runner'
-      dockerfile: '${{ parameters.dockerRoot }}/etl-runner/Dockerfile'
-      repository: '$(ACR_LOGIN_SERVER)/etl-runner'
-      tags: |
-        $(RESOLVED_TAG)
-        ${{ parameters.buildId }}
-      arguments: '--platform linux/amd64'
-
-  - task: Docker@2
-    displayName: 'Push ETL Runner Image'
-    inputs:
-      command: push
-      repository: '$(ACR_LOGIN_SERVER)/etl-runner'
-      tags: |
-        $(RESOLVED_TAG)
-        ${{ parameters.buildId }}
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      workingDirectory: ${{ parameters.dockerRoot }}
+      inlineScript: |
+        az acr run \
+          --registry $(ACR_NAME_RESOLVED) \
+          --file ../acr-tasks/build-all.yaml \
+          --set TAG=$(RESOLVED_TAG) \
+          --platform linux/amd64 \
+          .

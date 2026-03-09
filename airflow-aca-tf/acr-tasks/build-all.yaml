@@ -1,0 +1,35 @@
+version: v1.1.0
+steps:
+  # Build both images concurrently
+  - id: build-airflow
+    build: >
+      -t {{.Run.Registry}}/airflow:{{.Run.ID}}
+      -t {{.Run.Registry}}/airflow:$TAG
+      -t {{.Run.Registry}}/airflow:latest
+      -f airflow/Dockerfile
+      --platform linux/amd64
+      airflow
+    when: ["-"]
+
+  - id: build-etl-runner
+    build: >
+      -t {{.Run.Registry}}/etl-runner:{{.Run.ID}}
+      -t {{.Run.Registry}}/etl-runner:$TAG
+      -t {{.Run.Registry}}/etl-runner:latest
+      -f etl-runner/Dockerfile
+      --platform linux/amd64
+      etl-runner
+    when: ["-"]
+
+  # Push all images after successful builds
+  - push:
+      - "{{.Run.Registry}}/airflow:{{.Run.ID}}"
+      - "{{.Run.Registry}}/airflow:$TAG"
+      - "{{.Run.Registry}}/airflow:latest"
+    when: ["build-airflow"]
+
+  - push:
+      - "{{.Run.Registry}}/etl-runner:{{.Run.ID}}"
+      - "{{.Run.Registry}}/etl-runner:$TAG"
+      - "{{.Run.Registry}}/etl-runner:latest"
+    when: ["build-etl-runner"]

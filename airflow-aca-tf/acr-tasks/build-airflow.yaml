@@ -1,0 +1,19 @@
+version: v1.1.0
+steps:
+  # Build Airflow image
+  - id: build-airflow
+    build: >
+      -t {{.Run.Registry}}/airflow:{{.Run.ID}}
+      -t {{.Run.Registry}}/airflow:$TAG
+      -t {{.Run.Registry}}/airflow:latest
+      -f airflow/Dockerfile
+      --platform linux/amd64
+      airflow
+    when: ["-"]
+
+  # Push all tags
+  - push:
+      - "{{.Run.Registry}}/airflow:{{.Run.ID}}"
+      - "{{.Run.Registry}}/airflow:$TAG"
+      - "{{.Run.Registry}}/airflow:latest"
+    when: ["build-airflow"]

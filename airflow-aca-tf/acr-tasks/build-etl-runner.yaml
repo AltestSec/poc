@@ -1,0 +1,19 @@
+version: v1.1.0
+steps:
+  # Build ETL Runner image
+  - id: build-etl-runner
+    build: >
+      -t {{.Run.Registry}}/etl-runner:{{.Run.ID}}
+      -t {{.Run.Registry}}/etl-runner:$TAG
+      -t {{.Run.Registry}}/etl-runner:latest
+      -f etl-runner/Dockerfile
+      --platform linux/amd64
+      etl-runner
+    when: ["-"]
+
+  # Push all tags
+  - push:
+      - "{{.Run.Registry}}/etl-runner:{{.Run.ID}}"
+      - "{{.Run.Registry}}/etl-runner:$TAG"
+      - "{{.Run.Registry}}/etl-runner:latest"
+    when: ["build-etl-runner"]
