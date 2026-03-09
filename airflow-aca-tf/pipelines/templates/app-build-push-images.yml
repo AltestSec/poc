@@ -44,7 +44,7 @@ steps:
       inlineScript: |
         az acr run \
           --registry $(ACR_NAME_RESOLVED) \
-          --file $(System.DefaultWorkingDirectory)/airflow-aca-tf/pipelines/acr-tasks/build-all.yaml \
+          --file $(System.DefaultWorkingDirectory)/pipelines/acr-tasks/build-all.yaml \
           --set TAG=$(RESOLVED_TAG) \
           --platform linux/amd64 \
           ${{ parameters.dockerRoot }}
