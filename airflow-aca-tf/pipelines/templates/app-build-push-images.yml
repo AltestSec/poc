@@ -45,9 +45,19 @@ steps:
       scriptType: bash
       scriptLocation: inlineScript
       inlineScript: |
+        # Find the ACR Task file
+        TASK_FILE=$(find $(workingDirectory) -name "build-all.yaml" -path "*/pipelines/acr-tasks/*" | head -n 1)
+        
+        if [ -z "$TASK_FILE" ]; then
+          echo "ERROR: Could not find build-all.yaml in pipelines/acr-tasks/"
+          exit 1
+        fi
+        
+        echo "Found ACR Task file: $TASK_FILE"
+        
         az acr run \
           --registry $(ACR_NAME_RESOLVED) \
-          --file $(workingDirectory)/pipelines/acr-tasks/build-all.yaml \
+          --file "$TASK_FILE" \
           --set TAG=$(RESOLVED_TAG) \
           --platform linux/amd64 \
           ${{ parameters.dockerRoot }}
