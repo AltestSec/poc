@@ -9,6 +9,9 @@ parameters:
   - name: buildId
     type: string
     default: '$(Build.BuildId)'
+  - name: workingDirectory
+    type: string
+    default: ''
 
 steps:
   - bash: |
@@ -42,11 +45,9 @@ steps:
       scriptType: bash
       scriptLocation: inlineScript
       inlineScript: |
-        ls -lah ./ \
-        ls -lah $(System.DefaultWorkingDirectory) \
         az acr run \
           --registry $(ACR_NAME_RESOLVED) \
-          --file $(System.DefaultWorkingDirectory)/pipelines/acr-tasks/build-all.yaml \
+          --file $(workingDirectory)/pipelines/acr-tasks/build-all.yaml \
           --set TAG=$(RESOLVED_TAG) \
           --platform linux/amd64 \
           ${{ parameters.dockerRoot }}

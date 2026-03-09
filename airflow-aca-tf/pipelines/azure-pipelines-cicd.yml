@@ -76,6 +76,7 @@ stages:
               buildId: $(Build.BuildId)
               # Use current commit for tag unless user provided imageTag
               imageTag: ${{ coalesce(parameters.imageTag, '') }}
+              workingDirectory: $(workingDirectory)
 
   # ------------------------
   # CD: App Deploy
