@@ -45,7 +45,7 @@ steps:
       inlineScript: |
         az acr run \
           --registry $(ACR_NAME_RESOLVED) \
-          --file acr-tasks/build-all.yaml \
+          --file ../acr-tasks/build-all.yaml \
           --set TAG=$(RESOLVED_TAG) \
           --platform linux/amd64 \
           .
