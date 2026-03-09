@@ -75,17 +75,17 @@ steps:
       EOF
     displayName: 'Create ACR Tasks YAML'
 
-  # # Build and push both images using ACR Tasks
-  # - task: AzureCLI@2
-  #   displayName: 'Build and Push Images (ACR Tasks)'
-  #   inputs:
-  #     azureSubscription: ${{ parameters.serviceConnection }}
-  #     scriptType: bash
-  #     scriptLocation: inlineScript
-  #     inlineScript: |
-  #       az acr run \
-  #         --registry $(ACR_NAME_RESOLVED) \
-  #         --file acr-task.yaml \
-  #         --set TAG=$(RESOLVED_TAG) \
-  #         --platform linux/amd64 \
-  #         ${{ parameters.dockerRoot }}
+  # Build and push both images using ACR Tasks
+  - task: AzureCLI@2
+    displayName: 'Build and Push Images (ACR Tasks)'
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        az acr run \
+          --registry $(ACR_NAME_RESOLVED) \
+          --file acr-task.yaml \
+          --set TAG=$(RESOLVED_TAG) \
+          --platform linux/amd64 \
+          ${{ parameters.dockerRoot }}
