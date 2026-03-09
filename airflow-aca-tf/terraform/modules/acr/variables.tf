@@ -16,7 +16,17 @@ variable "resource_group_name" {
 variable "sku" {
   description = "ACR SKU"
   type        = string
-  default     = "Basic"
+  default     = "Premium"
+}
+
+variable "private_endpoint_subnet_id" {
+  description = "Subnet ID for private endpoint"
+  type        = string
+}
+
+variable "private_dns_zone_id" {
+  description = "Private DNS Zone ID for ACR"
+  type        = string
 }
 
 variable "tags" {

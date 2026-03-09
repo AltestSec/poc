@@ -53,3 +53,13 @@ output "key_vault_uri" {
   description = "Key Vault URI"
   value       = module.key_vault.vault_uri
 }
+
+output "vm_public_ip" {
+  description = "Windows VM public IP for RDP (if enabled)"
+  value       = var.enable_windows_vm ? module.windows_vm[0].public_ip : null
+}
+
+output "vm_rdp_command" {
+  description = "RDP connection command (if VM enabled)"
+  value       = var.enable_windows_vm ? module.windows_vm[0].rdp_connection_string : null
+}

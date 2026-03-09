@@ -43,6 +43,17 @@ data "azurerm_resource_group" "main" {
 
 data "azurerm_client_config" "current" {}
 
+module "network" {
+  source              = "./modules/network"
+  name                = "${local.resource_prefix}-vnet"
+  location            = data.azurerm_resource_group.main.location
+  resource_group_name = data.azurerm_resource_group.main.name
+  firewall_name       = "${local.resource_prefix}-fw"
+  firewall_sku_tier   = var.firewall_sku_tier
+  enable_firewall     = var.enable_firewall
+  tags                = local.common_tags
+}
+
 module "log_analytics" {
   source              = "./modules/log_analytics"
   name                = "${local.resource_prefix}-logs"
@@ -61,30 +72,37 @@ module "key_vault" {
 }
 
 module "acr" {
-  source              = "./modules/acr"
-  name                = replace("${local.resource_prefix}acr", "-", "")
-  location            = data.azurerm_resource_group.main.location
-  resource_group_name = data.azurerm_resource_group.main.name
-  sku                 = var.acr_sku
-  tags                = local.common_tags
+  source                      = "./modules/acr"
+  name                        = replace("${local.resource_prefix}acr", "-", "")
+  location                    = data.azurerm_resource_group.main.location
+  resource_group_name         = data.azurerm_resource_group.main.name
+  sku                         = var.acr_sku
+  private_endpoint_subnet_id  = module.network.private_endpoints_subnet_id
+  private_dns_zone_id         = module.network.acr_private_dns_zone_id
+  tags                        = local.common_tags
 }
 
 module "storage" {
-  source              = "./modules/storage"
-  name                = replace("${local.resource_prefix}stor", "-", "")
-  location            = data.azurerm_resource_group.main.location
-  resource_group_name = data.azurerm_resource_group.main.name
-  tags                = local.common_tags
+  source                      = "./modules/storage"
+  name                        = replace("${local.resource_prefix}stor", "-", "")
+  location                    = data.azurerm_resource_group.main.location
+  resource_group_name         = data.azurerm_resource_group.main.name
+  private_endpoint_subnet_id  = module.network.private_endpoints_subnet_id
+  blob_private_dns_zone_id    = module.network.blob_private_dns_zone_id
+  file_private_dns_zone_id    = module.network.file_private_dns_zone_id
+  tags                        = local.common_tags
 }
 
 module "postgresql" {
   source              = "./modules/postgresql"
   name                = "${local.resource_prefix}-pg"
-  location            = "northeurope" # PostgreSQL in North Europe
+  location            = "northeurope"
   resource_group_name = data.azurerm_resource_group.main.name
   sku_name            = var.postgres_sku_name
   deployment_mode     = var.deployment_mode
   admin_password      = var.postgres_admin_password
+  delegated_subnet_id = module.network.postgresql_subnet_id
+  private_dns_zone_id = module.network.postgres_private_dns_zone_id
   tags                = local.common_tags
 }
 
@@ -117,6 +135,7 @@ module "aca_environment" {
   storage_account_name        = module.storage.storage_account_name
   storage_account_key         = module.storage.storage_account_key
   file_share_name             = module.storage.dags_share_name
+  infrastructure_subnet_id    = module.network.container_apps_subnet_id
   tags                        = local.common_tags
 }
 
@@ -147,4 +166,20 @@ module "container_apps" {
   worker_principal_id          = module.managed_identity.worker_principal_id
   storage_account_id           = module.storage.storage_account_id
   tags                         = local.common_tags
+}
+
+# Optional Windows VM for accessing private network
+module "windows_vm" {
+  count                   = var.enable_windows_vm ? 1 : 0
+  source                  = "./modules/windows_vm"
+  name                    = "${local.resource_prefix}-vm"
+  resource_group_name     = data.azurerm_resource_group.main.name
+  location                = data.azurerm_resource_group.main.location
+  subnet_id               = module.network.vm_subnet_id
+  vm_size                 = var.vm_size
+  admin_username          = var.vm_admin_username
+  admin_password          = var.vm_admin_password
+  allowed_rdp_source_ip   = var.allowed_rdp_source_ip
+  managed_identity_id     = module.managed_identity.scheduler_identity_id
+  tags                    = local.common_tags
 }

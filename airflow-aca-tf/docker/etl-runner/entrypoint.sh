@@ -2,8 +2,19 @@
 # ============================================================
 # entrypoint.sh — etl-runner ACA Job
 # Runs DBT with parameters passed from Airflow via env vars
+# Supports test mode for network security validation
 # ============================================================
 set -euo pipefail
+
+# Check if running in test mode
+if [[ "${RUN_MODE:-}" == "test" ]]; then
+  echo "═══════════════════════════════════════════════"
+  echo " Running in TEST MODE"
+  echo " Started: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "═══════════════════════════════════════════════"
+  python3 /app/test_etl.py
+  exit $?
+fi
 
 DBT_TARGET="${DBT_TARGET:-prod}"
 DBT_MODELS="${DBT_MODELS:-}"

@@ -1,20 +1,33 @@
 # Airflow on Azure Container Apps - Terraform
 
-Terraform infrastructure as code for deploying Apache Airflow with CeleryExecutor on Azure Container Apps.
+Terraform infrastructure as code for deploying Apache Airflow with CeleryExecutor on Azure Container Apps with **enterprise-grade security and private networking**.
+
+## 🚀 Quick Start
+
+New to this deployment? Start here: **[QUICK_START.md](QUICK_START.md)**
+
+For detailed validation: **[TESTING_GUIDE.md](TESTING_GUIDE.md)**
 
 ## Architecture
 
-This Terraform configuration deploys the same architecture as the Bicep version:
+This Terraform configuration deploys a fully private and secure architecture:
 
-- Azure Container Registry (ACR) for storing container images
-- Azure Container Apps Environment with Log Analytics
+- **Private Networking**: All services deployed in VNet with no public access
+- **Azure Firewall**: Controls all egress traffic with application and network rules
+- **Private Endpoints**: ACR, Storage (Blob & File) accessible only within VNet
+- **Private PostgreSQL**: Deployed in delegated subnet with private DNS
+- Azure Container Registry (ACR) for storing container images (Premium SKU)
+- Azure Container Apps Environment with Log Analytics (VNet-integrated)
 - Airflow components: Scheduler, Webserver, Worker, Triggerer
-- ACA Job for ETL runner
-- PostgreSQL Flexible Server for metadata database
+- ACA Job for ETL runner with network security tests
+- PostgreSQL Flexible Server for metadata database (private)
 - Azure Cache for Redis for Celery broker
-- Azure Storage Account with File Share (DAGs) and Blob Container (logs)
+- Azure Storage Account with File Share (DAGs) and Blob Container (logs) - private
 - Azure Key Vault for secrets
 - Managed Identities with RBAC assignments
+- User Defined Routes (UDR) for traffic control
+
+See [PRIVATE_NETWORK_SETUP.md](PRIVATE_NETWORK_SETUP.md) for detailed network architecture and security configuration.
 
 ## Prerequisites
 
@@ -23,6 +36,17 @@ This Terraform configuration deploys the same architecture as the Bicep version:
 - Azure subscription with appropriate permissions
 - Azure DevOps project (for pipeline)
 - **Pre-existing Resource Group** (not managed by Terraform)
+- **Docker** (for building container images)
+
+### Important: Network Security
+
+This deployment creates a **fully private infrastructure** with:
+- No public access to ACR, Storage, or PostgreSQL
+- All egress traffic controlled by Azure Firewall
+- Private endpoints for all Azure services
+- User Defined Routes (UDR) for traffic routing
+
+See [PRIVATE_NETWORK_SETUP.md](PRIVATE_NETWORK_SETUP.md) for complete details.
 
 ### Important: Resource Group
 
@@ -71,22 +95,26 @@ airflow-aca-tf/
 │   ├── variables.tf               # Input variables
 │   ├── outputs.tf                 # Output values
 │   ├── modules/
-│   │   ├── acr/                   # Azure Container Registry
-│   │   ├── storage/               # Storage Account, File Share, Blob
-│   │   ├── postgresql/            # PostgreSQL Flexible Server
+│   │   ├── network/               # VNet, Firewall, Routes, Private DNS
+│   │   ├── acr/                   # Azure Container Registry (Private)
+│   │   ├── storage/               # Storage Account, File Share, Blob (Private)
+│   │   ├── postgresql/            # PostgreSQL Flexible Server (Private)
 │   │   ├── redis/                 # Azure Cache for Redis
 │   │   ├── log_analytics/         # Log Analytics Workspace
 │   │   ├── key_vault/             # Azure Key Vault
 │   │   ├── managed_identity/      # User-assigned identities
-│   │   ├── aca_environment/       # ACA Environment
-│   │   └── container_apps/        # Container Apps & Jobs
+│   │   ├── aca_environment/       # ACA Environment (VNet-integrated)
+│   │   ├── container_apps/        # Container Apps & Jobs
+│   │   └── windows_vm/            # Windows VM Jump Box (Optional)
 │   └── environments/
 │       ├── poc/
 │       │   └── terraform.tfvars   # PoC environment variables
 │       └── prod/
 │           └── terraform.tfvars   # Production environment variables
-└── pipelines/
-    └── azure-pipelines.yml        # Azure DevOps pipeline
+├── docker/                        # Container images
+├── dags/                          # Airflow DAGs
+├── scripts/                       # Helper scripts
+└── pipelines/                     # Azure DevOps pipeline
 ```
 
 ## Common Tags
@@ -214,23 +242,29 @@ See [RBAC_SETUP.md](RBAC_SETUP.md) for detailed instructions.
 
 ### 5. Build and Push Images to ACR
 
+Since ACR is private, build from within the VNet using a Windows VM:
+
+**Option 1: Windows VM (Recommended for Development)**
+
 ```bash
-# Get ACR name from Terraform output
-ACR_NAME=$(terraform output -raw acr_login_server | cut -d'.' -f1)
+# Enable VM in terraform.tfvars
+enable_windows_vm     = true
+vm_admin_password     = "YourComplexPassword123!"
+allowed_rdp_source_ip = "$(curl -s ifconfig.me)/32"
 
-# Login to ACR
-az acr login --name $ACR_NAME
+# Deploy VM
+terraform apply
 
-# Build and push Airflow image
-cd ../airflow-aca/airflow
-docker build -t $ACR_NAME.azurecr.io/airflow:latest .
-docker push $ACR_NAME.azurecr.io/airflow:latest
-
-# Build and push ETL runner image
-cd etl-runner
-docker build -t $ACR_NAME.azurecr.io/etl-runner:latest .
-docker push $ACR_NAME.azurecr.io/etl-runner:latest
+# Get VM IP and connect
+terraform output vm_public_ip
+# RDP to VM, then build images there
 ```
+
+See [WINDOWS_VM_GUIDE.md](WINDOWS_VM_GUIDE.md) for complete instructions.
+
+**Option 2: Azure DevOps Pipeline**
+
+Use the included pipeline which builds from Azure-hosted agents with VNet access.
 
 ### 6. Upload DAGs
 
@@ -245,6 +279,8 @@ az storage file upload-batch \
 
 ### 7. Access Webserver
 
+Since the webserver is internal-only, you need to use Azure Container Apps tunnel or deploy a jump box:
+
 ```bash
 WEBSERVER_NAME=$(terraform output -raw webserver_fqdn | cut -d'.' -f1)
 RESOURCE_GROUP="airflow-poc-rg"
@@ -256,6 +292,21 @@ az containerapp tunnel \
 ```
 
 Open http://localhost:8080
+
+### 8. Test ETL Job and Network Security
+
+Run the automated security tests:
+
+```bash
+./scripts/test-etl-job.sh <resource-group> <env-name>
+```
+
+This validates:
+- ETL job execution
+- Network egress restrictions
+- Firewall rules effectiveness
+
+See [PRIVATE_NETWORK_SETUP.md](PRIVATE_NETWORK_SETUP.md) for detailed testing procedures.
 
 ## Azure DevOps Pipeline
 
@@ -396,9 +447,7 @@ After deployment, Terraform outputs:
 
 ## Cost Estimate
 
-Same as Bicep deployment:
-
-### PoC: ~$71-87/month
+### PoC: ~$246-262/month
 - Scheduler: ~$15-20
 - Triggerer: ~$8-12
 - Webserver: ~$3-8
@@ -407,11 +456,21 @@ Same as Bicep deployment:
 - Redis: ~$25
 - Storage: ~$2
 - Log Analytics: ~$3-5
+- **Azure Firewall (Basic): ~$146**
+- **Private Endpoints (4): ~$29**
+- ACR (Premium): ~$0
 
-### Production: ~$200-300/month
+### Production: ~$1,141-1,241/month
 - Higher SKUs for PostgreSQL and Redis
 - More replicas for HA
 - Additional monitoring costs
+- **Azure Firewall (Standard): ~$912**
+- **Private Endpoints (4): ~$29**
+- ACR (Premium): ~$0
+
+**Note:** Private networking adds ~$175/month (PoC) or ~$941/month (Production) for enhanced security.
+
+See [PRIVATE_NETWORK_SETUP.md](PRIVATE_NETWORK_SETUP.md) for detailed cost breakdown.
 
 ## Cleanup
 
@@ -433,6 +492,25 @@ terraform destroy \
 5. **Tags Centralized**: Common tags defined only in main.tf
 
 ## Troubleshooting
+
+### Network Connectivity Issues
+
+If containers can't access resources:
+
+```bash
+# Test DNS resolution
+az containerapp exec \
+  --name airflow-poc-scheduler \
+  --resource-group airflow-poc-rg \
+  --command "nslookup <acr-name>.azurecr.io"
+
+# Check firewall logs
+az monitor log-analytics query \
+  --workspace <workspace-id> \
+  --analytics-query "AzureDiagnostics | where Category == 'AzureFirewallApplicationRule' | take 20"
+```
+
+See [PRIVATE_NETWORK_SETUP.md](PRIVATE_NETWORK_SETUP.md) for comprehensive troubleshooting.
 
 ### Terraform State Lock
 
@@ -460,6 +538,10 @@ az containerapp logs show \
 
 ## References
 
+- [Private Network Setup Guide](PRIVATE_NETWORK_SETUP.md)
+- [Secure Deployment Checklist](SECURE_DEPLOYMENT_CHECKLIST.md)
+- [Securing Network Egress in Azure Container Apps](https://techcommunity.microsoft.com/blog/azurepaasblog/securing-network-egress-in-azure-container-apps/3915548)
 - [Terraform AzureRM Provider](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs)
 - [Azure Container Apps Documentation](https://learn.microsoft.com/azure/container-apps/)
+- [Azure Firewall Documentation](https://learn.microsoft.com/azure/firewall/)
 - [Apache Airflow Documentation](https://airflow.apache.org/docs/)

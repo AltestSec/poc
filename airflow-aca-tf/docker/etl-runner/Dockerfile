@@ -25,6 +25,10 @@ RUN pip install --no-cache-dir \
 COPY dbt_project/ /app/dbt_project/
 COPY profiles.yml  /app/profiles.yml
 
+# Copy test script
+COPY test_etl.py /app/test_etl.py
+RUN chmod +x /app/test_etl.py
+
 # Copy entrypoint script
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh

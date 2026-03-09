@@ -93,7 +93,50 @@ variable "redis_capacity" {
 variable "acr_sku" {
   description = "ACR SKU"
   type        = string
-  default     = "Basic"
+  default     = "Premium"
+}
+
+variable "firewall_sku_tier" {
+  description = "Azure Firewall SKU tier (Basic, Standard, Premium). Set to empty string to disable firewall."
+  type        = string
+  default     = ""
+}
+
+variable "enable_firewall" {
+  description = "Enable Azure Firewall for egress control. Set to false to save costs (~$146-912/month)"
+  type        = bool
+  default     = false
+}
+
+variable "enable_windows_vm" {
+  description = "Enable Windows VM for accessing private network and building Docker images"
+  type        = bool
+  default     = false
+}
+
+variable "vm_size" {
+  description = "VM size for Windows jump box (Standard_B2s is cheapest with decent performance)"
+  type        = string
+  default     = "Standard_B2s"
+}
+
+variable "vm_admin_username" {
+  description = "VM admin username"
+  type        = string
+  default     = "azureuser"
+}
+
+variable "vm_admin_password" {
+  description = "VM admin password (must be complex: 12+ chars, upper, lower, number, special)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "allowed_rdp_source_ip" {
+  description = "Your public IP for RDP access (format: 'x.x.x.x/32' or '*' for any)"
+  type        = string
+  default     = "*"
 }
 
 variable "owner" {

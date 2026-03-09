@@ -12,15 +12,15 @@ resource "azurerm_postgresql_flexible_server" "postgres" {
 
   backup_retention_days        = 7
   geo_redundant_backup_enabled = false
+  
+  delegated_subnet_id = var.delegated_subnet_id
+  private_dns_zone_id = var.private_dns_zone_id
+  
+  public_network_access_enabled = false
+
   lifecycle {
     ignore_changes = [zone]
   }
-  #  dynamic "high_availability" {
-  #    for_each = var.deployment_mode == "production" ? [1] : []
-  #    content {
-  #      mode = "ZoneRedundant"
-  #    }
-  #  }
 
   tags = var.tags
 }
@@ -30,11 +30,4 @@ resource "azurerm_postgresql_flexible_server_database" "airflow" {
   server_id = azurerm_postgresql_flexible_server.postgres.id
   charset   = "UTF8"
   collation = "en_US.utf8"
-}
-
-resource "azurerm_postgresql_flexible_server_firewall_rule" "allow_azure" {
-  name             = "AllowAzureServices"
-  server_id        = azurerm_postgresql_flexible_server.postgres.id
-  start_ip_address = "0.0.0.0"
-  end_ip_address   = "0.0.0.0"
 }

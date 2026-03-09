@@ -20,4 +20,15 @@ postgres_sku_name = "B_Standard_B1ms"
 redis_sku_name    = "Standard"
 redis_family      = "C"
 redis_capacity    = 1
-acr_sku           = "Basic"
+acr_sku           = "Premium"  # Required for private endpoints
+
+# Optional: Azure Firewall for egress control
+# Adds ~$146/month - only enable if you need to restrict outbound traffic
+enable_firewall   = false
+# firewall_sku_tier = "Basic"  # Uncomment if enable_firewall = true
+
+# Optional: Windows VM for building Docker images and accessing private network
+# Adds ~$30-40/month - useful for development
+enable_windows_vm     = false
+# vm_admin_password     = ""  # Set via TF_VAR_vm_admin_password environment variable
+# allowed_rdp_source_ip = "*"  # Change to "your-ip/32" for security

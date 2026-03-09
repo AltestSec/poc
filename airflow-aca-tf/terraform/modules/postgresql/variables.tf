@@ -29,6 +29,16 @@ variable "admin_password" {
   sensitive   = true
 }
 
+variable "delegated_subnet_id" {
+  description = "Delegated subnet ID for PostgreSQL"
+  type        = string
+}
+
+variable "private_dns_zone_id" {
+  description = "Private DNS Zone ID for PostgreSQL"
+  type        = string
+}
+
 variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)

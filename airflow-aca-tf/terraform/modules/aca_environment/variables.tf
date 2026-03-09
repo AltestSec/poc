@@ -40,6 +40,11 @@ variable "file_share_name" {
   type        = string
 }
 
+variable "infrastructure_subnet_id" {
+  description = "Subnet ID for Container Apps infrastructure"
+  type        = string
+}
+
 variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)
