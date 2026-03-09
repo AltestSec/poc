@@ -42,8 +42,8 @@ steps:
       scriptType: bash
       scriptLocation: inlineScript
       inlineScript: |
-        ls -lah ./
-        ls -lah $(System.DefaultWorkingDirectory)
+        ls -lah ./ \
+        ls -lah $(System.DefaultWorkingDirectory) \
         az acr run \
           --registry $(ACR_NAME_RESOLVED) \
           --file $(System.DefaultWorkingDirectory)/pipelines/acr-tasks/build-all.yaml \
