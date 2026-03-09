@@ -46,7 +46,7 @@ steps:
       scriptLocation: inlineScript
       inlineScript: |
         # Find the ACR Task file
-        TASK_FILE=$(find $(workingDirectory) -name "build-all.yaml" -path "*/pipelines/acr-tasks/*" | head -n 1)
+        TASK_FILE=$(find $(Build.SourcesDirectory) -name "build-all.yaml" | head -n 1)
         
         if [ -z "$TASK_FILE" ]; then
           echo "ERROR: Could not find build-all.yaml in pipelines/acr-tasks/"
